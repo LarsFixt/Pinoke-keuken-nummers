@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="{{ str_replace('_', '-', app()->getLocale()) }}">
+<html lang="{{ str_replace('_', '-', app()->getLocale()) }}" class="min-h-screen flex flex-col">
 
 <head>
     <meta charset="utf-8">
@@ -18,10 +18,17 @@
     @fluxAppearance()
 </head>
 
-<body class="antialiased">
-    {{ $slot }}
+
+<body class="antialiased flex-1 flex flex-col min-h-screen">
+    <div class="flex-1 flex flex-col">
+        {{ $slot }}
+    </div>
     @livewireScripts
     @fluxScripts
 </body>
+
+<flux:footer class="text-center mt-auto">
+    <flux:text size="xl" variant="subtle">Powered by DJMRY &amp; LarsFixt</flux:text>
+</flux:footer>
 
 </html>
