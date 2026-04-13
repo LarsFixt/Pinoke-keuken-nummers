@@ -24,6 +24,15 @@
                     {{ __('Messages') }}
                 </flux:sidebar.item>
             </flux:sidebar.group>
+
+            @if (auth()->user()->is_super_admin)
+                <flux:sidebar.group :heading="__('Management')" class="grid">
+                    <flux:sidebar.item icon="user-group" :href="route('users')" :current="request()->routeIs('users')"
+                        wire:navigate>
+                        {{ __('Users') }}
+                    </flux:sidebar.item>
+                </flux:sidebar.group>
+            @endif
         </flux:sidebar.nav>
 
         <flux:spacer />
