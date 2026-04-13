@@ -5,7 +5,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="csrf-token" content="{{ csrf_token() }}">
-    <title>{{ config('app.name', 'Pinoke keuken orders') }}</title>
+    <title>{{ config('app.name', 'Pinoké keuken orders') }}</title>
     @vite(['resources/css/app.css', 'resources/js/app.js'])
     <style>
         [x-cloak] {
@@ -19,8 +19,8 @@
 </head>
 
 
-<body class="antialiased flex-1 flex flex-col min-h-screen">
-    <div class="flex-1 flex flex-col">
+<body class="flex-1 flex flex-col min-h-screen">
+    <div>
         {{ $slot }}
     </div>
     @livewireScripts
@@ -28,7 +28,9 @@
 </body>
 
 <flux:footer class="text-center mt-auto">
-    <flux:text size="xl" variant="subtle">Powered by DJMRY &amp; LarsFixt</flux:text>
+    <flux:text size="xl" variant="subtle">Powered by DJMRY &amp; <flux:link href="https://github.com/LarsFixt">
+            LarsFixt</flux:link>
+    </flux:text>
 </flux:footer>
 
 </html>

@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\OrderStatus;
 use Database\Factories\OrderFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -14,11 +15,18 @@ class Order extends Model
     protected $fillable = ['number', 'status'];
 
     /**
+     * Cast the status attribute to an OrderStatus enum instance.
+     */
+    protected $casts = [
+        'status' => OrderStatus::class,
+    ];
+
+    /**
      * Scope a query to only include ready orders.
      */
     public function scopeReady($query)
     {
-        return $query->where('status', 'ready');
+        return $query->where('status', OrderStatus::Ready);
     }
 
     /**
@@ -26,6 +34,6 @@ class Order extends Model
      */
     public function markCompleted(): void
     {
-        $this->update(['status' => 'completed']);
+        $this->update(['status' => OrderStatus::Completed]);
     }
 }

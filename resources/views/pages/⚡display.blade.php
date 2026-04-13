@@ -41,7 +41,7 @@ new #[Layout('layouts.guest')] class extends Component {
 };
 ?>
 <flux:main>
-    <div x-data="{ playSound() { console.log('🔔 Bell sound triggered'); new Audio('/sound/bell.mp3').play() } }" @echo:orders,OrderReady.window="playSound()">
+    <div x-data="{ playSound() { new Audio('/sound/bell.mp3').play() } }" @echo:orders,OrderReady.window="playSound()">
 
         <div class="text-center mb-8">
             <flux:text class="text-5xl lg:text-7xl font-black tracking-tight uppercase text-center">
@@ -56,6 +56,24 @@ new #[Layout('layouts.guest')] class extends Component {
                 </flux:callout.heading>
             </flux:callout>
         @endif
+
+        <!-- Mobile upsell to the track page for specific tracking -->
+        <div class="mb-4 md:hidden" x-data="{ visible: true }" x-show="visible" x-collapse>
+            <div x-show="visible" x-transition>
+                <flux:callout icon="bell" variant="secondary">
+                    <flux:callout.heading>{{ __('Get notified when it\'s ready') }}</flux:callout.heading>
+                    <flux:callout.text>
+                        {{ __('Enter your specific order number so we can send a push notification straight to your phone.') }}
+                    </flux:callout.text>
+                    <x-slot name="actions">
+                        <flux:button href="{{ route('track') }}">{{ __('Track your order') }}</flux:button>
+                    </x-slot>
+                    <x-slot name="controls">
+                        <flux:button icon="x-mark" variant="ghost" x-on:click="visible = false" />
+                    </x-slot>
+                </flux:callout>
+            </div>
+        </div>
 
         <div class="flex-1 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4 mb-8" x-transition>
             <!-- RECENT CALLS (MAIN FOCUS) -->
@@ -97,7 +115,7 @@ new #[Layout('layouts.guest')] class extends Component {
         @endif
 
         <!-- Desktop Fixed QR Code Upsell -->
-        <div class="fixed bottom-16 right-6 z-50 hidden md:block transition-opacity duration-500 ease-in-out">
+        <div class="fixed bottom-16 right-6 z-50 hidden lg:block transition-opacity duration-500 ease-in-out">
             <flux:card class="flex flex-row items-center shadow-xl gap-4">
                 <div class="flex flex-col gap-2 flex-1">
                     <flux:text class="text-4xl font-bold">

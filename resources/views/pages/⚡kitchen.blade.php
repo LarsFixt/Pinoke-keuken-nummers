@@ -4,9 +4,12 @@ use App\Events\OrderCompleted;
 use App\Events\OrderReady;
 use App\Models\Order;
 use Livewire\Attributes\Computed;
+use Livewire\Attributes\Validate;
+use Flux\Flux;
 use Livewire\Component;
 
 new class extends Component {
+    #[Validate('required|string|max:4')]
     public string $currentNumber = '';
 
     public function getListeners()
@@ -31,7 +34,18 @@ new class extends Component {
 
     public function callOrder(): void
     {
+        $this->validateOnly('currentNumber');
+
         if (empty($this->currentNumber)) {
+            return;
+        }
+
+        // Prevent duplicate orders with the same number
+        $exists = Order::ready()->where('number', $this->currentNumber)->exists();
+        if ($exists) {
+            Flux::toast(__('An order with this number is already ready.'), variant: 'danger');
+
+            $this->currentNumber = '';
             return;
         }
 
