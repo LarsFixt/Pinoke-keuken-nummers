@@ -2,9 +2,11 @@
 
 use App\Models\Order;
 use Livewire\Attributes\Layout;
+use Livewire\Attributes\Url;
 use Livewire\Component;
 
 new #[Layout('layouts::guest')] class extends Component {
+    #[Url(as: 'order')]
     public string $currentNumber = '';
 
     public bool $isWatching = false;
@@ -16,6 +18,10 @@ new #[Layout('layouts::guest')] class extends Component {
     public function mount(): void
     {
         $this->kitchenStatus = cache('kitchen_status', '');
+
+        if ($this->currentNumber) {
+            $this->startWatching($this->currentNumber);
+        }
     }
 
     public function getListeners(): array
@@ -41,7 +47,18 @@ new #[Layout('layouts::guest')] class extends Component {
 
         $this->currentNumber = $number;
         $this->isWatching = true;
-        $this->orderReady = Order::ready()->where('number', $this->currentNumber)->exists();
+
+        $order = Order::firstOrCreate(['number' => $this->currentNumber], ['status' => \App\OrderStatus::Pending]);
+        $this->orderReady = $order->status->value === 'ready';
+    }
+
+    public function subscribeToPush(string $number, string $endpoint, string $publicKey, string $authToken, string $contentEncoding): void
+    {
+        $order = Order::where('number', $number)->first();
+
+        if ($order) {
+            $order->updatePushSubscription($endpoint, $publicKey, $authToken, $contentEncoding);
+        }
     }
 
     public function stopTracking(): void
@@ -84,6 +101,42 @@ new #[Layout('layouts::guest')] class extends Component {
             } else {
                 new Notification(title, options);
             }
+        },
+        async subscribeToPush(number) {
+            if (!('serviceWorker' in navigator) || !('PushManager' in window)) return;
+            try {
+                const reg = await navigator.serviceWorker.ready;
+                const vapidPublicKey = '{{ config('webpush.vapid.public_key') }}';
+                if (!vapidPublicKey) return;
+    
+                const convertedVapidKey = this.urlBase64ToUint8Array(vapidPublicKey);
+                const subscription = await reg.pushManager.subscribe({
+                    userVisibleOnly: true,
+                    applicationServerKey: convertedVapidKey
+                });
+    
+                const key = subscription.getKey('p256dh');
+                const token = subscription.getKey('auth');
+                const contentEncoding = (PushManager.supportedContentEncodings || ['aesgcm'])[0];
+    
+                const endpoint = subscription.endpoint;
+                const publicKey = key ? btoa(String.fromCharCode.apply(null, new Uint8Array(key))) : null;
+                const authToken = token ? btoa(String.fromCharCode.apply(null, new Uint8Array(token))) : null;
+    
+                $wire.subscribeToPush(number, endpoint, publicKey, authToken, contentEncoding);
+            } catch (e) {
+                console.error('Push registration failed:', e);
+            }
+        },
+        urlBase64ToUint8Array(base64String) {
+            const padding = '='.repeat((4 - base64String.length % 4) % 4);
+            const base64 = (base64String + padding).replace(/\-/g, '+').replace(/_/g, '/');
+            const rawData = window.atob(base64);
+            const outputArray = new Uint8Array(rawData.length);
+            for (let i = 0; i < rawData.length; ++i) {
+                outputArray[i] = rawData.charCodeAt(i);
+            }
+            return outputArray;
         },
         playSound() {
             new Audio('/sound/bell.mp3').play();
@@ -180,7 +233,7 @@ new #[Layout('layouts::guest')] class extends Component {
                     </div>
 
                     <flux:button variant="primary" class="w-full mt-4" x-bind:disabled="!localNumber.length"
-                        @click="requestNotificationPermission(); $wire.startWatching(localNumber); localNumber = '';">
+                        @click="requestNotificationPermission().then(() => { $wire.startWatching(localNumber); subscribeToPush(localNumber); localNumber = ''; });">
                         {{ __('Follow my order') }}
                     </flux:button>
                 </flux:card>

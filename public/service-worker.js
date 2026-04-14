@@ -32,17 +32,31 @@ self.addEventListener('push', function (event) {
 // Optionally, handle notificationclick to focus/open the app and play sound if possible
 self.addEventListener('notificationclick', function (event) {
     event.notification.close();
+
+    const clickUrl = event.notification.data && event.notification.data.url ? event.notification.data.url : '/';
+
     event.waitUntil(
         self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then(function (clientList) {
-            // Try to focus an open window
+            // Try to find a window that's already open to the target URL
             for (const client of clientList) {
-                if (client.url && 'focus' in client) {
+                if (client.url === clickUrl && 'focus' in client) {
                     client.postMessage({ playSound: true });
                     return client.focus();
                 }
             }
+
+            // Try to focus any open window and navigate there
+            for (const client of clientList) {
+                if (client.url && 'focus' in client) {
+                    client.postMessage({ playSound: true });
+                    return client.navigate(clickUrl).then(c => c.focus());
+                }
+            }
+
             // Otherwise, open a new window
-            return self.clients.openWindow('/');
+            if (self.clients.openWindow) {
+                return self.clients.openWindow(clickUrl);
+            }
         })
     );
 });

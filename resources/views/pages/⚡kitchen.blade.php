@@ -3,6 +3,8 @@
 use App\Events\OrderCompleted;
 use App\Events\OrderReady;
 use App\Models\Order;
+use App\OrderStatus;
+use App\Notifications\OrderReadyNotification;
 use Illuminate\Support\Facades\Validator;
 use Livewire\Attributes\Computed;
 use Flux\Flux;
@@ -35,12 +37,11 @@ new class extends Component {
             return;
         }
 
-        $order = Order::create([
-            'number' => $number,
-            'status' => 'ready',
-        ]);
+        $order = Order::firstOrCreate(['number' => $number], ['status' => OrderStatus::Pending]);
+        $order->update(['status' => OrderStatus::Ready]);
 
         broadcast(new OrderReady($order))->toOthers();
+        $order->notify(new OrderReadyNotification($order));
     }
 
     public function completeOrder(int $id): void
@@ -50,6 +51,7 @@ new class extends Component {
         if ($order) {
             $order->markCompleted();
             broadcast(new OrderCompleted($order))->toOthers();
+            $order->pushSubscriptions()->delete();
         }
     }
 

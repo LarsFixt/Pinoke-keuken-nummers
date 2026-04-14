@@ -11,8 +11,8 @@
     <link rel="icon" href="/favicon.ico" sizes="any">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <meta name="apple-mobile-web-app-title" content="Pinoké Keuken">
-    <title>{{ config('app.name', 'Pinoké Keuken') }}</title>
+    <meta name="apple-mobile-web-app-title" content="Pinoké Order Tracker">
+    <title>{{ config('app.name', 'Pinoké Order Tracker') }}</title>
     @vite(['resources/css/app.css', 'resources/js/app.js'])
     <style>
         [x-cloak] {

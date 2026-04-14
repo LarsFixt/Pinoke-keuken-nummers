@@ -13,7 +13,7 @@ return [
     |
     */
 
-    'name' => env('APP_NAME', 'Pinoké keuken orders'),
+    'name' => env('APP_NAME', 'Pinoké Order Tracker'),
 
     /*
     |--------------------------------------------------------------------------
