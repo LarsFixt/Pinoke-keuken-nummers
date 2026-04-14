@@ -1,6 +1,6 @@
 {
     "name": "Pinoké Order Tracker",
-    "short_name": "Order Tracker",
+    "short_name": "Pinoké Orders",
     "start_url": "/",
     "display": "standalone",
     "background_color": "#ffffff",

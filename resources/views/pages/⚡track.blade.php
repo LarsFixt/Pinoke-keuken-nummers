@@ -31,26 +31,15 @@ new #[Layout('layouts::guest')] class extends Component {
         $this->kitchenStatus = $event['message'] ?? '';
     }
 
-    public function appendNumber(string $num): void
+    public function startWatching(string $number): void
     {
-        if (!$this->isWatching && strlen($this->currentNumber) < 4) {
-            $this->currentNumber .= $num;
-        }
-    }
+        $number = trim($number);
 
-    public function clearNumber(): void
-    {
-        if (!$this->isWatching) {
-            $this->currentNumber = '';
-        }
-    }
-
-    public function startWatching(): void
-    {
-        if (empty($this->currentNumber)) {
+        if (empty($number) || !preg_match('/^[0-9]{1,4}$/', $number)) {
             return;
         }
 
+        $this->currentNumber = $number;
         $this->isWatching = true;
         $this->orderReady = Order::ready()->where('number', $this->currentNumber)->exists();
     }
@@ -74,17 +63,26 @@ new #[Layout('layouts::guest')] class extends Component {
 <flux:main>
     <div class="flex flex-col items-center justify-center" x-data="{
         notified: false,
+        localNumber: '',
         async requestNotificationPermission() {
             if ('Notification' in window && Notification.permission === 'default') {
                 await Notification.requestPermission();
             }
         },
-        sendNotification(number) {
-            if ('Notification' in window && Notification.permission === 'granted') {
-                new Notification('{{ __('Your order is ready!') }}', {
-                    body: '{{ __('Number') }} ' + number + ' - {{ __('Come pick up your food!') }}',
-                    icon: '/favicon.ico',
-                });
+        async sendNotification(number) {
+            if (!('Notification' in window) || Notification.permission !== 'granted') return;
+            const title = '{{ __('Your order is ready!') }}';
+            const options = {
+                body: '{{ __('Number') }} ' + number + ' - {{ __('Come pick up your food!') }}',
+                icon: '/android-chrome-192x192.png',
+                badge: '/android-chrome-192x192.png',
+                vibrate: [200, 100, 200, 100, 200],
+            };
+            if ('serviceWorker' in navigator) {
+                const reg = await navigator.serviceWorker.ready;
+                await reg.showNotification(title, options);
+            } else {
+                new Notification(title, options);
             }
         },
         playSound() {
@@ -157,31 +155,32 @@ new #[Layout('layouts::guest')] class extends Component {
                 <flux:card>
                     <div
                         class="text-center mb-6 h-20 flex items-center justify-center bg-gray-100 rounded-xl dark:bg-zinc-800">
-                        <span class="text-5xl font-black text-gray-900 dark:text-gray-100 tracking-wider">
-                            {{ $currentNumber ?: '...' }}
+                        <span class="text-5xl font-black text-gray-900 dark:text-gray-100 tracking-wider"
+                            x-text="localNumber || '...'">
                         </span>
                     </div>
 
                     <div class="grid grid-cols-3 gap-3">
                         @foreach ([7, 8, 9, 4, 5, 6, 1, 2, 3] as $num)
-                            <flux:button wire:click="appendNumber('{{ $num }}')" class="h-16 text-2xl!">
+                            <flux:button @click="if (localNumber.length < 4) localNumber += '{{ $num }}'"
+                                class="h-16 text-2xl!">
                                 {{ $num }}
                             </flux:button>
                         @endforeach
 
-                        <flux:button wire:click="clearNumber" variant="ghost" class="h-16 text-lg!">
+                        <flux:button @click="localNumber = ''" variant="ghost" class="h-16 text-lg!">
                             {{ __('Clear') }}
                         </flux:button>
 
-                        <flux:button wire:click="appendNumber('0')" class="h-16 text-2xl!">
+                        <flux:button @click="if (localNumber.length < 4) localNumber += '0'" class="h-16 text-2xl!">
                             0
                         </flux:button>
 
                         <div></div>
                     </div>
 
-                    <flux:button variant="primary" class="w-full mt-4" x-bind:disabled="!$wire.currentNumber.length"
-                        @click="requestNotificationPermission(); $wire.startWatching();">
+                    <flux:button variant="primary" class="w-full mt-4" x-bind:disabled="!localNumber.length"
+                        @click="requestNotificationPermission(); $wire.startWatching(localNumber); localNumber = '';">
                         {{ __('Follow my order') }}
                     </flux:button>
                 </flux:card>

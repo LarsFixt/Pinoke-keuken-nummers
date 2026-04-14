@@ -3,15 +3,12 @@
 use App\Events\OrderCompleted;
 use App\Events\OrderReady;
 use App\Models\Order;
+use Illuminate\Support\Facades\Validator;
 use Livewire\Attributes\Computed;
-use Livewire\Attributes\Validate;
 use Flux\Flux;
 use Livewire\Component;
 
 new class extends Component {
-    #[Validate('required|string|max:4')]
-    public string $currentNumber = '';
-
     public function getListeners()
     {
         return [
@@ -20,43 +17,30 @@ new class extends Component {
         ];
     }
 
-    public function appendNumber(string $num): void
+    public function callOrder(string $number): void
     {
-        if (strlen($this->currentNumber) < 4) {
-            $this->currentNumber .= $num;
-        }
-    }
+        $number = trim($number);
 
-    public function clearNumber(): void
-    {
-        $this->currentNumber = '';
-    }
+        $validator = Validator::make(['number' => $number], ['number' => ['required', 'string', 'max:4', 'regex:/^[0-9]+$/']]);
 
-    public function callOrder(): void
-    {
-        $this->validateOnly('currentNumber');
-
-        if (empty($this->currentNumber)) {
+        if ($validator->fails()) {
             return;
         }
 
         // Prevent duplicate orders with the same number
-        $exists = Order::ready()->where('number', $this->currentNumber)->exists();
+        $exists = Order::ready()->where('number', $number)->exists();
         if ($exists) {
             Flux::toast(__('An order with this number is already ready.'), variant: 'danger');
 
-            $this->currentNumber = '';
             return;
         }
 
         $order = Order::create([
-            'number' => $this->currentNumber,
+            'number' => $number,
             'status' => 'ready',
         ]);
 
         broadcast(new OrderReady($order))->toOthers();
-
-        $this->currentNumber = '';
     }
 
     public function completeOrder(int $id): void
@@ -88,28 +72,30 @@ new class extends Component {
     <div class="flex gap-6 flex-col lg:flex-row">
         <!-- Numpad Section -->
         <div class="flex-1 w-full max-w-sm mx-auto">
-            <flux:card>
+            <flux:card x-data="{ currentNumber: '' }">
                 <div
                     class="text-center mb-6 h-24 flex items-center justify-center bg-gray-100 rounded-xl dark:bg-zinc-800">
-                    <span class="text-6xl font-black text-gray-900 dark:text-gray-100 tracking-wider">
-                        {{ $currentNumber ?: '...' }}
+                    <span class="text-6xl font-black text-gray-900 dark:text-gray-100 tracking-wider"
+                        x-text="currentNumber || '...'">
                     </span>
                 </div>
 
                 <div class="grid grid-cols-3 gap-3">
                     @foreach ([7, 8, 9, 4, 5, 6, 1, 2, 3] as $num)
-                        <flux:button wire:click="appendNumber('{{ $num }}')" class="h-20 text-3xl!">
+                        <flux:button @click="if (currentNumber.length < 4) currentNumber += '{{ $num }}'"
+                            class="h-20 text-3xl!">
                             {{ $num }}
                         </flux:button>
                     @endforeach
 
-                    <flux:button wire:click="clearNumber" variant="danger" class="h-20 text-xl!">
+                    <flux:button @click="currentNumber = ''" variant="danger" class="h-20 text-xl!">
                         {{ __('Clear') }}
                     </flux:button>
-                    <flux:button wire:click="appendNumber('0')" class="h-20 text-3xl!">
+                    <flux:button @click="if (currentNumber.length < 4) currentNumber += '0'" class="h-20 text-3xl!">
                         0
                     </flux:button>
-                    <flux:button wire:click="callOrder" variant="primary" color="green" class="h-20 text-xl!">
+                    <flux:button @click="$wire.callOrder(currentNumber); currentNumber = ''" variant="primary"
+                        color="green" class="h-20 text-xl!">
                         {{ __('Call') }}
                     </flux:button>
                 </div>
