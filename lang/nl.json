@@ -1,6 +1,8 @@
 {
+    "Enter your order number and receive a notification the moment your food is ready for pick-up.": "Vul je bestelnummer in en ontvang een melding zodra je eten klaar is om op te halen.",
+    "Live overview of all orders that are ready for pick-up.": "Live overzicht van alle bestellingen die klaarstaan om op te halen.",
     "Orders": "Bestellingen",
-    "Please collect your food": "Klaar om op te halen",
+    "Ready for pick-up": "Klaar om op te halen",
     "Scan to view on your phone": "Scan om op je telefoon te bekijken",
     "Also Ready": "Al langer klaar",
     "Preparing Orders...": "Bestellingen in voorbereiding...",
@@ -13,6 +15,7 @@
     "We will notify you as soon as it is ready.": "We sturen een melding zodra je eten klaarstaat.",
     "Cancel": "Annuleren",
     "Allow notifications": "Meldingen toestaan",
+    "Keep this page open to receive notifications. For the best experience, add this page to your home screen.": "Houd deze pagina open om meldingen te ontvangen. Voeg de pagina toe aan je beginscherm voor de beste ervaring.",
     "Clear": "Wissen",
     "Follow my order": "Volg mijn bestelling",
     "Number": "Nummer",
@@ -40,5 +43,8 @@
     "Manage your kitchen orders": "Beheer je keukenbestellingen",
     "Skip the wait at the counter!": "Sla het wachten bij de kassa over!",
     "Get notified when it's ready": "Laat het me weten als het klaar is",
-    "Enter your specific order number so we can send a push notification straight to your phone.": "Vul je specifieke bestelnummer in zodat we een pushmelding rechtstreeks naar je telefoon kunnen sturen."
+    "Enter your specific order number so we can send a push notification straight to your phone.": "Vul je specifieke bestelnummer in zodat we een pushmelding rechtstreeks naar je telefoon kunnen sturen.",
+    "Or visit": "Of bezoek",
+    "All orders": "Alle bestellingen",
+    "Track order": "Bestelling volgen"
 }

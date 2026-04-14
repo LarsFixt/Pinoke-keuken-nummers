@@ -9,6 +9,7 @@ self.addEventListener('activate', event => {
 
 
 // Listen for push events to show notifications with vibration and sound
+// Only show if the app is not currently focused — Reverb/Echo handles it when the app is open
 self.addEventListener('push', function (event) {
     let data = {};
     if (event.data) {
@@ -21,11 +22,13 @@ self.addEventListener('push', function (event) {
         badge: data.badge || '/favicon.ico',
         vibrate: [200, 100, 200, 100, 200],
         data: data.data || {},
-        // No direct way to play sound from service worker, but we can add a sound property for clients
-        sound: data.sound || '/sound/bell.mp3',
     };
     event.waitUntil(
-        self.registration.showNotification(title, options)
+        self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then(function (clients) {
+            const isAppFocused = clients.some(c => c.focused);
+            if (isAppFocused) return;
+            return self.registration.showNotification(title, options);
+        })
     );
 });
 

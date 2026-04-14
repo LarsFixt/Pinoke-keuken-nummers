@@ -41,12 +41,22 @@ new #[Layout('layouts.guest')] class extends Component {
 };
 ?>
 <flux:main>
+    @push('meta')
+        <meta name="description" content="{{ __('Live overview of all orders that are ready for pick-up.') }}">
+        <meta name="robots" content="noindex, nofollow">
+    @endpush
+    @push('og')
+        <meta property="og:description" content="{{ __('Live overview of all orders that are ready for pick-up.') }}">
+    @endpush
+    @push('twitter')
+        <meta name="twitter:description" content="{{ __('Live overview of all orders that are ready for pick-up.') }}">
+    @endpush
     <div x-data="{ playSound() { new Audio('/sound/bell.mp3').play() } }" @echo:orders,OrderReady.window="playSound()">
 
         <div class="text-center mb-8">
             <flux:text class="text-5xl lg:text-7xl font-black tracking-tight uppercase text-center">
                 {{ __('Orders') }}</flux:text>
-            <flux:text class="text-2xl mt-4 uppercase">{{ __('Please collect your food') }}</flux:text>
+            <flux:text class="text-2xl mt-4 uppercase">{{ __('Ready for pick-up') }}</flux:text>
         </div>
 
         @if ($kitchenStatus)
@@ -123,6 +133,10 @@ new #[Layout('layouts.guest')] class extends Component {
                     </flux:text>
                     <flux:text class="text-2xl">
                         {{ __('Scan the QR code to track your order on your phone, and we will notify you when it\'s ready.') }}
+                    </flux:text>
+                    <flux:text class="text-2xl">
+                        {{ __('Or visit') }} <flux:link variant="ghost" href="{{ route('track') }}">
+                            {{ route('track') }}</flux:link>
                     </flux:text>
                 </div>
                 <div class="shrink-0 overflow-hidden flex items-center justify-center">

@@ -9,8 +9,6 @@ new #[Layout('layouts::guest')] class extends Component {
     #[Url(as: 'order')]
     public string $currentNumber = '';
 
-    public bool $isWatching = false;
-
     public bool $orderReady = false;
 
     public string $kitchenStatus = '';
@@ -46,7 +44,6 @@ new #[Layout('layouts::guest')] class extends Component {
         }
 
         $this->currentNumber = $number;
-        $this->isWatching = true;
 
         $order = Order::firstOrCreate(['number' => $this->currentNumber], ['status' => \App\OrderStatus::Pending]);
         $this->orderReady = $order->status->value === 'ready';
@@ -64,13 +61,12 @@ new #[Layout('layouts::guest')] class extends Component {
     public function stopTracking(): void
     {
         $this->currentNumber = '';
-        $this->isWatching = false;
         $this->orderReady = false;
     }
 
     public function checkOrderReady(array $event): void
     {
-        if ($this->isWatching && isset($event['order']['number']) && (string) $event['order']['number'] === (string) $this->currentNumber) {
+        if ($this->currentNumber && isset($event['order']['number']) && (string) $event['order']['number'] === (string) $this->currentNumber) {
             $this->orderReady = true;
         }
     }
@@ -78,9 +74,26 @@ new #[Layout('layouts::guest')] class extends Component {
 ?>
 
 <flux:main>
+    @push('meta')
+        <meta name="description"
+            content="{{ __('Enter your order number and receive a notification the moment your food is ready for pick-up.') }}">
+    @endpush
+    @push('og')
+        <meta property="og:description"
+            content="{{ __('Enter your order number and receive a notification the moment your food is ready for pick-up.') }}">
+    @endpush
+    @push('twitter')
+        <meta name="twitter:description"
+            content="{{ __('Enter your order number and receive a notification the moment your food is ready for pick-up.') }}">
+    @endpush
     <div class="flex flex-col items-center justify-center" x-data="{
-        notified: false,
+        notified: @js($orderReady),
         localNumber: '',
+        async init() {
+            if (this.notified) {
+                await this.closePushNotifications();
+            }
+        },
         async requestNotificationPermission() {
             if ('Notification' in window && Notification.permission === 'default') {
                 await Notification.requestPermission();
@@ -141,12 +154,22 @@ new #[Layout('layouts::guest')] class extends Component {
         playSound() {
             new Audio('/sound/bell.mp3').play();
         },
+        async closePushNotifications() {
+            if (!('serviceWorker' in navigator)) return;
+            const reg = await navigator.serviceWorker.ready;
+            const notifications = await reg.getNotifications();
+            notifications.forEach(n => n.close());
+        },
     }"
-        x-effect="if ($wire.orderReady && !notified) { notified = true; playSound(); sendNotification($wire.currentNumber); }">
+        x-effect="if ($wire.orderReady && !notified) { notified = true; playSound(); sendNotification($wire.currentNumber); closePushNotifications(); }">
         <div class="text-center mb-8 w-full">
-            <h1 class="text-3xl font-black tracking-tight uppercase">
+            <flux:breadcrumbs class="mb-4">
+                <flux:breadcrumbs.item href="{{ route('home') }}">{{ __('All orders') }}</flux:breadcrumbs.item>
+                <flux:breadcrumbs.item>{{ __('Track order') }}</flux:breadcrumbs.item>
+            </flux:breadcrumbs>
+            <flux:text class="text-3xl font-black tracking-tight uppercase">
                 {{ __('Track your order') }}
-            </h1>
+            </flux:text>
             <flux:text class="text-base mt-2">
                 {{ __('Enter your number and we will let you know when your food is ready.') }}
             </flux:text>
@@ -175,7 +198,7 @@ new #[Layout('layouts::guest')] class extends Component {
                     </flux:button>
                 </flux:card>
             </div>
-        @elseif ($isWatching)
+        @elseif ($currentNumber)
             {{-- Watching state --}}
 
             <div class="w-full text-center">
@@ -239,5 +262,9 @@ new #[Layout('layouts::guest')] class extends Component {
                 </flux:card>
             </div>
         @endif
+
+        <flux:text class="mt-4 px-2">
+            {{ __('Keep this page open to receive notifications. For the best experience, add this page to your home screen.') }}
+        </flux:text>
     </div>
 </flux:main>
