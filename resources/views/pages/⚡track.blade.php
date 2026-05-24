@@ -49,9 +49,13 @@ new #[Layout('layouts::guest')] class extends Component {
         $this->orderReady = $order->status->value === 'ready';
     }
 
-    public function subscribeToPush(string $number, string $endpoint, string $publicKey, string $authToken, string $contentEncoding): void
+    public function subscribeToPush(string $endpoint, string $publicKey, string $authToken, string $contentEncoding): void
     {
-        $order = Order::where('number', $number)->first();
+        if (empty($this->currentNumber)) {
+            return;
+        }
+
+        $order = Order::where('number', $this->currentNumber)->first();
 
         if ($order) {
             $order->updatePushSubscription($endpoint, $publicKey, $authToken, $contentEncoding);
@@ -115,7 +119,7 @@ new #[Layout('layouts::guest')] class extends Component {
                 new Notification(title, options);
             }
         },
-        async subscribeToPush(number) {
+        async subscribeToPush() {
             if (!('serviceWorker' in navigator) || !('PushManager' in window)) return;
             try {
                 const reg = await navigator.serviceWorker.ready;
@@ -136,7 +140,7 @@ new #[Layout('layouts::guest')] class extends Component {
                 const publicKey = key ? btoa(String.fromCharCode.apply(null, new Uint8Array(key))) : null;
                 const authToken = token ? btoa(String.fromCharCode.apply(null, new Uint8Array(token))) : null;
     
-                $wire.subscribeToPush(number, endpoint, publicKey, authToken, contentEncoding);
+                $wire.subscribeToPush(endpoint, publicKey, authToken, contentEncoding);
             } catch (e) {
                 console.error('Push registration failed:', e);
             }
@@ -256,7 +260,7 @@ new #[Layout('layouts::guest')] class extends Component {
                     </div>
 
                     <flux:button variant="primary" class="w-full mt-4" x-bind:disabled="!localNumber.length"
-                        @click="requestNotificationPermission().then(() => { $wire.startWatching(localNumber); subscribeToPush(localNumber); localNumber = ''; });">
+                        @click="requestNotificationPermission().then(() => { $wire.startWatching(localNumber); subscribeToPush(); localNumber = ''; });">
                         {{ __('Follow my order') }}
                     </flux:button>
                 </flux:card>

@@ -37,8 +37,7 @@ new class extends Component {
             return;
         }
 
-        $order = Order::firstOrCreate(['number' => $number], ['status' => OrderStatus::Pending]);
-        $order->update(['status' => OrderStatus::Ready]);
+        $order = Order::updateOrCreate(['number' => $number], ['status' => OrderStatus::Ready]);
 
         broadcast(new OrderReady($order))->toOthers();
         $order->notify(new OrderReadyNotification($order));
@@ -48,17 +47,33 @@ new class extends Component {
     {
         $order = Order::find($id);
 
-        if ($order) {
+        if ($order && $order->status === OrderStatus::Ready) {
             $order->markCompleted();
             broadcast(new OrderCompleted($order))->toOthers();
             $order->pushSubscriptions()->delete();
         }
     }
 
+    public function reactivateOrder(int $id): void
+    {
+        $order = Order::find($id);
+
+        if ($order && $order->status === OrderStatus::Completed) {
+            $order->update(['status' => OrderStatus::Ready]);
+            broadcast(new OrderReady($order))->toOthers();
+        }
+    }
+
+    #[Computed]
+    public function recentlyCompletedOrders()
+    {
+        return Order::where('status', OrderStatus::Completed)->latest('updated_at')->limit(5)->get();
+    }
+
     #[Computed]
     public function readyOrders()
     {
-        return Order::ready()->latest()->get();
+        return Order::ready()->withCount('pushSubscriptions')->latest()->get();
     }
 };
 ?>
@@ -78,7 +93,7 @@ new class extends Component {
                 <div
                     class="text-center mb-6 h-24 flex items-center justify-center bg-gray-100 rounded-xl dark:bg-zinc-800">
                     <span class="text-6xl font-black text-gray-900 dark:text-gray-100 tracking-wider"
-                        x-text="currentNumber || '...'">
+                        x-text="currentNumber || '....'">
                     </span>
                 </div>
 
@@ -107,26 +122,41 @@ new class extends Component {
         <!-- Active Orders Section -->
         <div class="flex-1">
             <flux:card>
-                <flux:heading size="xl" class="mb-4">{{ __('Ready orders') }}</flux:heading>
+                <flux:heading size="xl">{{ __('Ready orders') }}</flux:heading>
+                <flux:subheading class="mb-4">{{ __('Tap an order to mark it as complete.') }}</flux:subheading>
 
                 <div class="grid grid-cols-2 sm:grid-cols-3 gap-4">
                     @forelse($this->readyOrders as $order)
-                        <button wire:click="completeOrder({{ $order->id }})"
-                            class="p-4 bg-lime-100 dark:bg-lime-900/30 border border-lime-200 dark:border-lime-800 rounded-xl text-center hover:bg-lime-200 dark:hover:bg-lime-900/50 transition group-active:scale-95">
-                            <div class="text-3xl font-black text-lime-800 dark:text-lime-300">
-                                {{ $order->number }}
-                            </div>
-                            <div class="text-xs text-lime-600 dark:text-lime-500 mt-1 uppercase font-semibold">
-                                {{ __('Tap to complete') }}
-                            </div>
-                        </button>
+                        <flux:button wire:click="completeOrder({{ $order->id }})" variant="primary" color="green"
+                            icon:trailing="{{ $order->push_subscriptions_count > 0 ? 'device-phone-mobile' : '' }}"
+                            title="{{ $order->push_subscriptions_count > 0 ? __('Push linked') : '' }}"
+                            class="w-full h-16 text-3xl! font-black!">
+                            {{ $order->number }}
+                        </flux:button>
                     @empty
-                        <div class="col-span-full text-center py-8 text-zinc-500">
+                        <flux:text size="lg" class="col-span-full text-center py-8">
                             {{ __('No orders currently ready.') }}
-                        </div>
+                        </flux:text>
                     @endforelse
                 </div>
             </flux:card>
+
+            @if ($this->recentlyCompletedOrders->isNotEmpty())
+                <flux:card class="mt-4">
+                    <flux:heading size="xl" class="mb-4">{{ __('Recently completed') }}</flux:heading>
+                    <flux:subheading class="mb-4">
+                        {{ __('Tap to re-add if you completed the wrong order.') }}</flux:subheading>
+
+                    <div class="flex flex-wrap gap-4">
+                        @foreach ($this->recentlyCompletedOrders as $order)
+                            <flux:button wire:click="reactivateOrder({{ $order->id }})" variant="filled"
+                                class="h-16 text-3xl! font-black!">
+                                {{ $order->number }}
+                            </flux:button>
+                        @endforeach
+                    </div>
+                </flux:card>
+            @endif
         </div>
     </div>
 </div>

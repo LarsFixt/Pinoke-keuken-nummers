@@ -2,9 +2,10 @@
     "agents": [
         "copilot"
     ],
+    "cloud": false,
     "guidelines": true,
     "mcp": true,
-    "nightwatch_mcp": false,
+    "nightwatch": false,
     "sail": false,
     "skills": [
         "fortify-development",

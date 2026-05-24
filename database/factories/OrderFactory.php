@@ -12,7 +12,7 @@ class OrderFactory extends Factory
     public function definition(): array
     {
         return [
-            'number' => $this->faker->numerify('###'),
+            'number' => $this->faker->numerify('####'),
             'status' => 'ready',
         ];
     }

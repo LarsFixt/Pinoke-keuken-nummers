@@ -2,9 +2,9 @@
 
 use App\Events\OrderCompleted;
 use App\Events\OrderReady;
-use App\Livewire\KitchenNumpad;
 use App\Models\Order;
 use App\Models\User;
+use App\OrderStatus;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Event;
 use Livewire\Livewire;
@@ -12,30 +12,37 @@ use Livewire\Livewire;
 uses(RefreshDatabase::class);
 
 it('requires authentication to view kitchen screen', function () {
-    $this->get('/kitchen')->assertRedirect('/login');
+    $this->get(route('dashboard'))->assertRedirect(route('login'));
 });
 
-it('allows authenticated users to view kitchen screen', function () {
-    $user = User::factory()->create();
+it('requires admin role to view kitchen screen', function () {
+    $user = User::factory()->create(['is_admin' => false]);
 
     $this->actingAs($user)
-        ->get('/kitchen')
-        ->assertStatus(200);
+        ->get(route('dashboard'))
+        ->assertForbidden();
+});
+
+it('allows admin users to view the kitchen screen', function () {
+    $user = User::factory()->create(['is_admin' => true]);
+
+    $this->actingAs($user)
+        ->get(route('dashboard'))
+        ->assertOk();
 });
 
 it('allows anyone to view the public display screen', function () {
-    $this->get('/display')->assertStatus(200);
+    $this->get(route('home'))->assertStatus(200);
 });
 
-it('can broadcast order ready event from kitchen numpad', function () {
+it('can call an order from the kitchen', function () {
     Event::fake([OrderReady::class]);
 
-    Livewire::test(KitchenNumpad::class)
-        ->call('appendNumber', '1')
-        ->call('appendNumber', '2')
-        ->call('callOrder')
-        ->assertSet('currentNumber', '')
-        ->assertSee('12');
+    $user = User::factory()->create(['is_admin' => true]);
+
+    Livewire::actingAs($user)
+        ->test('pages::kitchen')
+        ->call('callOrder', '12');
 
     $this->assertDatabaseHas('orders', [
         'number' => '12',
@@ -45,14 +52,32 @@ it('can broadcast order ready event from kitchen numpad', function () {
     Event::assertDispatched(OrderReady::class);
 });
 
-it('can broadcast order completed event from kitchen numpad', function () {
+it('can call a four-digit order from the kitchen', function () {
+    Event::fake([OrderReady::class]);
+
+    $user = User::factory()->create(['is_admin' => true]);
+
+    Livewire::actingAs($user)
+        ->test('pages::kitchen')
+        ->call('callOrder', '1234');
+
+    $this->assertDatabaseHas('orders', [
+        'number' => '1234',
+        'status' => 'ready',
+    ]);
+
+    Event::assertDispatched(OrderReady::class);
+});
+
+it('can complete an order from the kitchen', function () {
     Event::fake([OrderCompleted::class]);
 
-    $order = Order::factory()->create(['number' => '42', 'status' => 'ready']);
+    $user = User::factory()->create(['is_admin' => true]);
+    $order = Order::factory()->create(['number' => '42', 'status' => OrderStatus::Ready]);
 
-    Livewire::test(KitchenNumpad::class)
-        ->call('completeOrder', $order->id)
-        ->assertDontSee($order->number);
+    Livewire::actingAs($user)
+        ->test('pages::kitchen')
+        ->call('completeOrder', $order->id);
 
     $this->assertDatabaseHas('orders', [
         'id' => $order->id,
@@ -60,4 +85,83 @@ it('can broadcast order completed event from kitchen numpad', function () {
     ]);
 
     Event::assertDispatched(OrderCompleted::class);
+});
+
+it('can reactivate a completed order from the kitchen', function () {
+    Event::fake([OrderReady::class]);
+
+    $user = User::factory()->create(['is_admin' => true]);
+    $order = Order::factory()->create(['number' => '55', 'status' => OrderStatus::Completed]);
+
+    Livewire::actingAs($user)
+        ->test('pages::kitchen')
+        ->call('reactivateOrder', $order->id);
+
+    $this->assertDatabaseHas('orders', [
+        'id' => $order->id,
+        'status' => 'ready',
+    ]);
+
+    Event::assertDispatched(OrderReady::class);
+});
+
+it('does not reactivate an order that is still ready', function () {
+    Event::fake([OrderReady::class]);
+
+    $user = User::factory()->create(['is_admin' => true]);
+    $order = Order::factory()->create(['number' => '66', 'status' => OrderStatus::Ready]);
+
+    Livewire::actingAs($user)
+        ->test('pages::kitchen')
+        ->call('reactivateOrder', $order->id);
+
+    $this->assertDatabaseHas('orders', [
+        'id' => $order->id,
+        'status' => 'ready',
+    ]);
+
+    Event::assertNotDispatched(OrderReady::class);
+});
+
+it('does not complete an order that is not ready', function () {
+    Event::fake([OrderCompleted::class]);
+
+    $user = User::factory()->create(['is_admin' => true]);
+    $order = Order::factory()->create(['number' => '77', 'status' => OrderStatus::Pending]);
+
+    Livewire::actingAs($user)
+        ->test('pages::kitchen')
+        ->call('completeOrder', $order->id);
+
+    $this->assertDatabaseHas('orders', [
+        'id' => $order->id,
+        'status' => 'pending',
+    ]);
+
+    Event::assertNotDispatched(OrderCompleted::class);
+});
+
+it('shows push indicator for ready orders with a push subscription', function () {
+    $user = User::factory()->create(['is_admin' => true]);
+    $order = Order::factory()->create(['number' => '8888', 'status' => OrderStatus::Ready]);
+
+    $order->pushSubscriptions()->create([
+        'endpoint' => 'https://example.test/push-indicator-1',
+        'public_key' => 'public-key',
+        'auth_token' => 'auth-token',
+        'content_encoding' => 'aesgcm',
+    ]);
+
+    Livewire::actingAs($user)
+        ->test('pages::kitchen')
+        ->assertSee(__('Push linked'));
+});
+
+it('hides push indicator when ready orders have no push subscriptions', function () {
+    $user = User::factory()->create(['is_admin' => true]);
+    Order::factory()->create(['number' => '7777', 'status' => OrderStatus::Ready]);
+
+    Livewire::actingAs($user)
+        ->test('pages::kitchen')
+        ->assertDontSee(__('Push linked'));
 });

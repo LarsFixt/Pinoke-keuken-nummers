@@ -13,23 +13,28 @@ it('shows the order number entry form by default', function () {
     $this->get('/track')->assertSee(__('Track your order'));
 });
 
+it('supports four-digit order numbers in the track flow', function () {
+    Order::factory()->create(['number' => '1234', 'status' => 'ready']);
+
+    Livewire\Livewire::test('pages::track')
+        ->call('startWatching', '1234')
+        ->assertSet('currentNumber', '1234')
+        ->assertSet('orderReady', true);
+});
+
 it('marks order as immediately ready when order is already called', function () {
     Order::factory()->create(['number' => '42', 'status' => 'ready']);
 
     Livewire\Livewire::test('pages::track')
-        ->call('appendNumber', '4')
-        ->call('appendNumber', '2')
-        ->call('startWatching')
-        ->assertSet('isWatching', true)
+        ->call('startWatching', '42')
+        ->assertSet('currentNumber', '42')
         ->assertSet('orderReady', true);
 });
 
 it('stays in waiting state when order is not yet called', function () {
     Livewire\Livewire::test('pages::track')
-        ->call('appendNumber', '9')
-        ->call('appendNumber', '9')
-        ->call('startWatching')
-        ->assertSet('isWatching', true)
+        ->call('startWatching', '99')
+        ->assertSet('currentNumber', '99')
         ->assertSet('orderReady', false);
 });
 
@@ -37,60 +42,41 @@ it('sets order ready when the matching OrderReady event fires', function () {
     Order::factory()->create(['number' => '77', 'status' => 'ready']);
 
     Livewire\Livewire::test('pages::track')
-        ->call('appendNumber', '7')
-        ->call('appendNumber', '7')
-        ->call('startWatching')
+        ->call('startWatching', '77')
         ->call('checkOrderReady', ['order' => ['number' => '77']])
         ->assertSet('orderReady', true);
 });
 
 it('does not set order ready when a different number is called', function () {
     Livewire\Livewire::test('pages::track')
-        ->call('appendNumber', '1')
-        ->call('appendNumber', '2')
-        ->call('startWatching')
+        ->call('startWatching', '12')
         ->call('checkOrderReady', ['order' => ['number' => '99']])
         ->assertSet('orderReady', false);
 });
 
 it('does not set order ready if not watching', function () {
     Livewire\Livewire::test('pages::track')
-        ->call('appendNumber', '5')
         ->call('checkOrderReady', ['order' => ['number' => '5']])
-        ->assertSet('isWatching', false)
+        ->assertSet('currentNumber', '')
         ->assertSet('orderReady', false);
 });
 
-it('resets state back to number entry', function () {
+it('resets state when stopping tracking', function () {
     Livewire\Livewire::test('pages::track')
-        ->call('appendNumber', '3')
-        ->call('startWatching')
+        ->call('startWatching', '3')
         ->call('stopTracking')
         ->assertSet('currentNumber', '')
-        ->assertSet('isWatching', false)
         ->assertSet('orderReady', false);
 });
 
-it('does not accept more than 4 digits', function () {
+it('ignores invalid characters in number', function () {
     Livewire\Livewire::test('pages::track')
-        ->call('appendNumber', '1')
-        ->call('appendNumber', '2')
-        ->call('appendNumber', '3')
-        ->call('appendNumber', '4')
-        ->call('appendNumber', '5')
-        ->assertSet('currentNumber', '1234');
-});
-
-it('clears the number', function () {
-    Livewire\Livewire::test('pages::track')
-        ->call('appendNumber', '5')
-        ->call('appendNumber', '6')
-        ->call('clearNumber')
+        ->call('startWatching', 'abc')
         ->assertSet('currentNumber', '');
 });
 
-it('does not start watching when number is empty', function () {
+it('ignores numbers longer than 4 digits', function () {
     Livewire\Livewire::test('pages::track')
-        ->call('startWatching')
-        ->assertSet('isWatching', false);
+        ->call('startWatching', '12345')
+        ->assertSet('currentNumber', '');
 });
