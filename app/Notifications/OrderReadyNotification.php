@@ -40,7 +40,7 @@ class OrderReadyNotification extends Notification
         return (new WebPushMessage)
             ->title(__('Your order is ready!'))
             ->icon('/android-chrome-192x192.png')
-            ->body(__('Number') . ' ' . $this->order->number . ' - ' . __('Come pick up your food!'))
+            ->body(__('Number').' '.$this->order->number.' - '.__('Come pick up your food!'))
             ->action(__('Track your order'), $url)
             ->options(['TTL' => 60 * 15]) // 15 mins to live
             ->data(['url' => $url, 'order_number' => $this->order->number]);

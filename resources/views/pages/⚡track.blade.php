@@ -1,6 +1,7 @@
 <?php
 
 use App\Models\Order;
+use App\OrderStatus;
 use Livewire\Attributes\Layout;
 use Livewire\Attributes\Url;
 use Livewire\Component;
@@ -45,7 +46,7 @@ new #[Layout('layouts::guest')] class extends Component {
 
         $this->currentNumber = $number;
 
-        $order = Order::firstOrCreate(['number' => $this->currentNumber], ['status' => \App\OrderStatus::Pending]);
+        $order = Order::firstOrCreate(['number' => $this->currentNumber], ['status' => OrderStatus::Pending]);
         $this->orderReady = $order->status->value === 'ready';
     }
 
@@ -66,6 +67,21 @@ new #[Layout('layouts::guest')] class extends Component {
     {
         $this->currentNumber = '';
         $this->orderReady = false;
+    }
+
+    public function refreshTrackingStatus(): void
+    {
+        if ($this->currentNumber === '') {
+            return;
+        }
+
+        $order = Order::where('number', $this->currentNumber)->first();
+
+        if (!$order) {
+            return;
+        }
+
+        $this->orderReady = $order->status->value === 'ready';
     }
 
     public function checkOrderReady(array $event): void
@@ -93,15 +109,120 @@ new #[Layout('layouts::guest')] class extends Component {
     <div class="flex flex-col items-center justify-center" x-data="{
         notified: @js($orderReady),
         localNumber: '',
+        notificationPermission: 'unsupported',
+        notificationMode: 'echo-only',
+        pushLinkState: 'idle',
+        supportsNotifications: false,
+        supportsPush: false,
+        isIos: false,
+        isStandalone: false,
+        installTipDismissed: false,
+        backgroundRefreshInterval: null,
         async init() {
+            const userAgent = window.navigator.userAgent || '';
+            const platform = window.navigator.platform || '';
+    
+            this.isIos = /iPad|iPhone|iPod/.test(userAgent) || (platform === 'MacIntel' && window.navigator.maxTouchPoints > 1);
+            this.isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+            this.supportsNotifications = 'Notification' in window;
+            this.supportsPush = 'serviceWorker' in navigator && 'PushManager' in window;
+            this.notificationPermission = this.supportsNotifications ? Notification.permission : 'unsupported';
+            this.installTipDismissed = window.localStorage.getItem('track_install_tip_dismissed') === '1';
+    
+            this.updateNotificationMode();
+            this.setupRefreshFallbacks();
+    
             if (this.notified) {
                 await this.closePushNotifications();
             }
+    
+            if ($wire.currentNumber && !$wire.orderReady) {
+                await this.activateBestNotificationAgent();
+            }
+        },
+        setupRefreshFallbacks() {
+            document.addEventListener('visibilitychange', () => {
+                if (!document.hidden && $wire.currentNumber && !$wire.orderReady) {
+                    $wire.refreshTrackingStatus();
+                }
+            });
+    
+            window.addEventListener('online', () => {
+                if ($wire.currentNumber && !$wire.orderReady) {
+                    $wire.refreshTrackingStatus();
+                }
+            });
+    
+            this.backgroundRefreshInterval = window.setInterval(() => {
+                if ($wire.currentNumber && !$wire.orderReady) {
+                    $wire.refreshTrackingStatus();
+                }
+            }, 30000);
+        },
+        updateNotificationMode() {
+            this.notificationPermission = this.supportsNotifications ? Notification.permission : 'unsupported';
+    
+            if (this.isIos) {
+                this.notificationMode = 'echo-only-ios';
+                this.pushLinkState = 'unsupported';
+    
+                return;
+            }
+    
+            if (!this.supportsNotifications || !this.supportsPush) {
+                this.notificationMode = 'echo-only';
+                this.pushLinkState = 'unsupported';
+    
+                return;
+            }
+    
+            if (this.notificationPermission === 'granted') {
+                this.notificationMode = 'push-ready';
+    
+                return;
+            }
+    
+            if (this.notificationPermission === 'denied') {
+                this.notificationMode = 'push-blocked';
+    
+                return;
+            }
+    
+            this.notificationMode = 'permission-needed';
+        },
+        dismissInstallTip() {
+            this.installTipDismissed = true;
+            window.localStorage.setItem('track_install_tip_dismissed', '1');
+        },
+        async beginTracking() {
+            if (!this.localNumber.length) {
+                return;
+            }
+    
+            await $wire.startWatching(this.localNumber);
+            await this.activateBestNotificationAgent();
+            this.localNumber = '';
+        },
+        async activateBestNotificationAgent() {
+            this.updateNotificationMode();
+    
+            if (this.notificationMode === 'permission-needed') {
+                await this.requestNotificationPermission();
+            }
+    
+            if (this.notificationMode === 'push-ready') {
+                await this.subscribeToPush();
+            }
         },
         async requestNotificationPermission() {
-            if ('Notification' in window && Notification.permission === 'default') {
-                await Notification.requestPermission();
+            if (!this.supportsNotifications || this.isIos || this.notificationPermission !== 'default') {
+                this.updateNotificationMode();
+    
+                return;
             }
+    
+            this.notificationPermission = await Notification.requestPermission();
+            this.updateNotificationMode();
         },
         async sendNotification(number) {
             if (!('Notification' in window) || Notification.permission !== 'granted') return;
@@ -120,28 +241,52 @@ new #[Layout('layouts::guest')] class extends Component {
             }
         },
         async subscribeToPush() {
-            if (!('serviceWorker' in navigator) || !('PushManager' in window)) return;
+            if (!this.supportsPush || this.notificationMode !== 'push-ready') {
+                this.pushLinkState = 'unsupported';
+    
+                return;
+            }
+    
+            this.pushLinkState = 'linking';
+    
             try {
                 const reg = await navigator.serviceWorker.ready;
                 const vapidPublicKey = '{{ config('webpush.vapid.public_key') }}';
-                if (!vapidPublicKey) return;
+                if (!vapidPublicKey) {
+                    this.pushLinkState = 'failed';
+    
+                    return;
+                }
     
                 const convertedVapidKey = this.urlBase64ToUint8Array(vapidPublicKey);
-                const subscription = await reg.pushManager.subscribe({
-                    userVisibleOnly: true,
-                    applicationServerKey: convertedVapidKey
-                });
+                let subscription = await reg.pushManager.getSubscription();
+    
+                if (!subscription) {
+                    subscription = await reg.pushManager.subscribe({
+                        userVisibleOnly: true,
+                        applicationServerKey: convertedVapidKey
+                    });
+                }
     
                 const key = subscription.getKey('p256dh');
                 const token = subscription.getKey('auth');
-                const contentEncoding = (PushManager.supportedContentEncodings || ['aesgcm'])[0];
+    
+                if (!key || !token) {
+                    this.pushLinkState = 'failed';
+    
+                    return;
+                }
+    
+                const contentEncoding = (PushManager.supportedContentEncodings || ['aesgcm'])[0] || 'aesgcm';
     
                 const endpoint = subscription.endpoint;
-                const publicKey = key ? btoa(String.fromCharCode.apply(null, new Uint8Array(key))) : null;
-                const authToken = token ? btoa(String.fromCharCode.apply(null, new Uint8Array(token))) : null;
+                const publicKey = btoa(String.fromCharCode.apply(null, new Uint8Array(key)));
+                const authToken = btoa(String.fromCharCode.apply(null, new Uint8Array(token)));
     
                 $wire.subscribeToPush(endpoint, publicKey, authToken, contentEncoding);
+                this.pushLinkState = 'linked';
             } catch (e) {
+                this.pushLinkState = 'failed';
                 console.error('Push registration failed:', e);
             }
         },
@@ -185,7 +330,7 @@ new #[Layout('layouts::guest')] class extends Component {
 
         @if ($orderReady)
             {{-- Order ready --}}
-            <div class="w-full text-center">
+            <div class="w-full max-w-lg text-center">
                 <flux:card class="flex flex-col items-center justify-center gap-4 py-10">
                     <flux:icon.check-circle class="w-20 h-20 text-green-500" />
                     <flux:text class="text-8xl font-black tracking-tighter">
@@ -205,7 +350,7 @@ new #[Layout('layouts::guest')] class extends Component {
         @elseif ($currentNumber)
             {{-- Watching state --}}
 
-            <div class="w-full text-center">
+            <div class="w-full max-w-lg text-center">
                 <flux:card class="flex flex-col items-center justify-center gap-4 py-10">
                     <flux:icon.clock class="w-16 h-16 animate-pulse" />
                     <flux:text class="text-8xl font-black tracking-tighter">
@@ -222,16 +367,57 @@ new #[Layout('layouts::guest')] class extends Component {
                     </flux:button>
                 </flux:card>
 
-                <div x-cloak x-show="'Notification' in window && Notification.permission === 'default'" class="mt-4">
+                <div x-cloak x-show="notificationMode === 'permission-needed'" class="mt-4">
                     <flux:button @click="requestNotificationPermission()" variant="subtle" class="w-full text-sm"
                         icon="bell" icon-position="left">
                         {{ __('Allow notifications') }}
                     </flux:button>
                 </div>
+
+                <flux:callout x-cloak x-show="notificationMode === 'push-ready' && pushLinkState === 'linked'"
+                    icon="check-circle" variant="success" class="mt-4 text-left">
+                    <flux:callout.heading>{{ __('Background notifications are active on this device.') }}
+                    </flux:callout.heading>
+                </flux:callout>
+
+                <flux:callout x-cloak x-show="notificationMode === 'push-ready' && pushLinkState === 'failed'"
+                    icon="exclamation-triangle" variant="warning" class="mt-4 text-left">
+                    <flux:callout.heading>{{ __('We could not enable push yet. Keep this page open and try again.') }}
+                    </flux:callout.heading>
+                    <x-slot name="actions">
+                        <flux:button size="sm" variant="filled" @click="subscribeToPush()">
+                            {{ __('Try again') }}
+                        </flux:button>
+                    </x-slot>
+                </flux:callout>
+
+                <flux:callout x-cloak x-show="notificationMode === 'push-blocked'" icon="bell-slash" variant="warning"
+                    class="mt-4 text-left">
+                    <flux:callout.heading>{{ __('Notifications are blocked in your browser settings for this site.') }}
+                    </flux:callout.heading>
+                    <flux:callout.text>
+                        {{ __('Keep this page open while waiting, or enable notifications in your browser settings.') }}
+                    </flux:callout.text>
+                </flux:callout>
+
+                <flux:callout x-cloak x-show="notificationMode === 'echo-only-ios'" icon="device-phone-mobile"
+                    variant="secondary" class="mt-4 text-left">
+                    <flux:callout.heading>{{ __('iPhone and iPad browsers cannot deliver background push here.') }}
+                    </flux:callout.heading>
+                    <flux:callout.text>
+                        {{ __('Keep this page open while waiting. Tip: tap Share and choose Add to Home Screen for faster return access.') }}
+                    </flux:callout.text>
+                </flux:callout>
+
+                <flux:callout x-cloak x-show="notificationMode === 'echo-only'" icon="signal" variant="secondary"
+                    class="mt-4 text-left">
+                    <flux:callout.heading>{{ __('Live updates are active while this page is open.') }}
+                    </flux:callout.heading>
+                </flux:callout>
             </div>
         @else
             {{-- Number entry --}}
-            <div class="w-full">
+            <div class="w-full max-w-lg">
                 <flux:card>
                     <div
                         class="text-center mb-6 h-20 flex items-center justify-center bg-gray-100 rounded-xl dark:bg-zinc-800">
@@ -260,15 +446,42 @@ new #[Layout('layouts::guest')] class extends Component {
                     </div>
 
                     <flux:button variant="primary" class="w-full mt-4" x-bind:disabled="!localNumber.length"
-                        @click="requestNotificationPermission().then(() => { $wire.startWatching(localNumber); subscribeToPush(); localNumber = ''; });">
+                        @click="beginTracking()">
                         {{ __('Follow my order') }}
                     </flux:button>
                 </flux:card>
             </div>
         @endif
 
-        <flux:text class="mt-4 px-2">
-            {{ __('Keep this page open to receive notifications. For the best experience, add this page to your home screen.') }}
+        <div class="w-full max-w-lg mt-4" x-cloak x-show="!installTipDismissed">
+            <flux:callout icon="device-phone-mobile" variant="secondary" class="text-left">
+                <flux:callout.heading x-show="isIos">
+                    {{ __('Best on iPhone: keep this page open and add it to your Home Screen.') }}
+                </flux:callout.heading>
+                <flux:callout.heading x-show="!isIos">
+                    {{ __('Best experience: allow notifications and add this app to your Home Screen.') }}
+                </flux:callout.heading>
+
+                <flux:callout.text x-show="isIos">
+                    {{ __('On iPhone: tap the Share button, then tap Add to Home Screen. Open this page before your order is called.') }}
+                </flux:callout.text>
+                <flux:callout.text x-show="!isIos">
+                    {{ __('On Android and desktop, browser notifications can alert you even when this tab is not in front.') }}
+                </flux:callout.text>
+
+                <x-slot name="controls">
+                    <flux:button icon="x-mark" variant="ghost" x-on:click="dismissInstallTip()" />
+                </x-slot>
+            </flux:callout>
+        </div>
+
+        <flux:text class="mt-4 px-2 text-center"
+            x-show="notificationMode === 'echo-only-ios' || notificationMode === 'echo-only' || notificationMode === 'push-blocked'">
+            {{ __('Keep this page open to receive notifications on this device.') }}
         </flux:text>
+
+        @if ($currentNumber && !$orderReady)
+            <div wire:poll.30s.keep-alive="refreshTrackingStatus" class="hidden"></div>
+        @endif
     </div>
 </flux:main>

@@ -18,7 +18,7 @@ class IsSuperAdmin
         if (! auth()->check() || ! auth()->user()->is_super_admin) {
             abort(403);
         }
-        
+
         return $next($request);
     }
 }

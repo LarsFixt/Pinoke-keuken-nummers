@@ -51,5 +51,20 @@
     "Push linked": "Push gekoppeld",
     "Recently completed": "Onlangs afgerond",
     "Tap to re-add if you completed the wrong order.": "Tik om opnieuw toe te voegen als je de verkeerde bestelling hebt afgerond.",
-    "An order with this number is already ready.": "Er is al een bestelling met dit nummer klaar."
+    "An order with this number is already ready.": "Er is al een bestelling met dit nummer klaar.",
+    "Background notifications are active on this device.": "Achtergrondmeldingen zijn actief op dit apparaat.",
+    "We could not enable push yet. Keep this page open and try again.": "We konden pushmeldingen nog niet inschakelen. Houd deze pagina open en probeer het opnieuw.",
+    "Try again": "Opnieuw proberen",
+    "Notifications are blocked in your browser settings for this site.": "Meldingen zijn geblokkeerd in je browserinstellingen voor deze site.",
+    "Keep this page open while waiting, or enable notifications in your browser settings.": "Houd deze pagina open tijdens het wachten, of schakel meldingen in via je browserinstellingen.",
+    "iPhone and iPad browsers cannot deliver background push here.": "Browsers op iPhone en iPad kunnen hier geen pushmeldingen op de achtergrond bezorgen.",
+    "Keep this page open while waiting. Tip: tap Share and choose Add to Home Screen for faster return access.": "Houd deze pagina open tijdens het wachten. Tip: tik op Deel en kies Zet op beginscherm om sneller terug te komen.",
+    "Live updates are active while this page is open.": "Live updates zijn actief zolang deze pagina openstaat.",
+    "Best on iPhone: keep this page open and add it to your Home Screen.": "Beste op iPhone: houd deze pagina open en voeg hem toe aan je beginscherm.",
+    "Best experience: allow notifications and add this app to your Home Screen.": "Beste ervaring: sta meldingen toe en voeg deze app toe aan je beginscherm.",
+    "On iPhone: tap the Share button, then tap Add to Home Screen. Open this page before your order is called.": "Op iPhone: tik op de Deel-knop en daarna op Zet op beginscherm. Open deze pagina voordat je bestelling wordt omgeroepen.",
+    "On Android and desktop, browser notifications can alert you even when this tab is not in front.": "Op Android en desktop kunnen browsermeldingen je waarschuwen, ook als dit tabblad niet vooraan staat.",
+    "Keep this page open to receive notifications on this device.": "Houd deze pagina open om meldingen op dit apparaat te ontvangen.",
+    "Scan the QR code, enter your order number, and enable notifications on your phone.": "Scan de QR-code, vul je bestelnummer in en schakel meldingen in op je telefoon.",
+    "1. Scan the QR code. 2. Enter your order number. 3. Allow notifications on your phone.": "1. Scan de QR-code. 2. Vul je bestelnummer in. 3. Sta meldingen toe op je telefoon."
 }

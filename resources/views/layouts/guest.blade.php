@@ -40,14 +40,14 @@
 
     <link rel="preconnect" href="https://fonts.bunny.net">
     <link href="https://fonts.bunny.net/css?family=inter:400,500,600&display=swap" rel="stylesheet" />
-    @if (env('APP_ENV') === 'production')
+    @if (app()->isProduction())
         <script defer src="https://cloud.umami.is/script.js" data-website-id="bc315229-babf-4984-a17b-d0cf6ba4fe3e"></script>
     @endif
     @fluxAppearance()
 </head>
 
 
-<body class="flex-1 flex flex-col min-h-screen">
+<body class="flex-1 flex flex-col min-h-95vh">
     <div>
         {{ $slot }}
     </div>

@@ -73,7 +73,7 @@ new #[Layout('layouts.guest')] class extends Component {
                 <flux:callout icon="bell" variant="secondary">
                     <flux:callout.heading>{{ __('Get notified when it\'s ready') }}</flux:callout.heading>
                     <flux:callout.text>
-                        {{ __('Enter your specific order number so we can send a push notification straight to your phone.') }}
+                        {{ __('Scan the QR code, enter your order number, and enable notifications on your phone.') }}
                     </flux:callout.text>
                     <x-slot name="actions">
                         <flux:button href="{{ route('track') }}">{{ __('Track your order') }}</flux:button>
@@ -132,7 +132,7 @@ new #[Layout('layouts.guest')] class extends Component {
                         {{ __('Rather wait somewhere else?') }}
                     </flux:text>
                     <flux:text class="text-2xl">
-                        {{ __('Scan the QR code to track your order on your phone, and we will notify you when it\'s ready.') }}
+                        {{ __('1. Scan the QR code. 2. Enter your order number. 3. Allow notifications on your phone.') }}
                     </flux:text>
                     <flux:text class="text-2xl">
                         {{ __('Or visit') }} <flux:link variant="ghost" href="{{ route('track') }}">

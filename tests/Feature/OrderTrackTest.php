@@ -61,6 +61,27 @@ it('does not set order ready if not watching', function () {
         ->assertSet('orderReady', false);
 });
 
+it('refreshes tracking status from the database for fallback delivery', function () {
+    $order = Order::factory()->create(['number' => '81', 'status' => 'pending']);
+
+    $component = Livewire\Livewire::test('pages::track')
+        ->call('startWatching', '81')
+        ->assertSet('orderReady', false);
+
+    $order->update(['status' => 'ready']);
+
+    $component
+        ->call('refreshTrackingStatus')
+        ->assertSet('orderReady', true);
+});
+
+it('ignores fallback refresh when no number is being tracked', function () {
+    Livewire\Livewire::test('pages::track')
+        ->call('refreshTrackingStatus')
+        ->assertSet('currentNumber', '')
+        ->assertSet('orderReady', false);
+});
+
 it('resets state when stopping tracking', function () {
     Livewire\Livewire::test('pages::track')
         ->call('startWatching', '3')

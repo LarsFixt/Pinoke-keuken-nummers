@@ -13,7 +13,11 @@ self.addEventListener('activate', event => {
 self.addEventListener('push', function (event) {
     let data = {};
     if (event.data) {
-        data = event.data.json();
+        try {
+            data = event.data.json();
+        } catch (_) {
+            data = {};
+        }
     }
     const title = data.title || 'Order Ready!';
     const options = {
@@ -25,8 +29,12 @@ self.addEventListener('push', function (event) {
     };
     event.waitUntil(
         self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then(function (clients) {
-            const isAppFocused = clients.some(c => c.focused);
-            if (isAppFocused) return;
+            const hasVisibleClient = clients.some(client => client.focused || client.visibilityState === 'visible');
+
+            if (hasVisibleClient) {
+                return;
+            }
+
             return self.registration.showNotification(title, options);
         })
     );
