@@ -31,6 +31,10 @@
                         wire:navigate>
                         {{ __('Users') }}
                     </flux:sidebar.item>
+                    <flux:sidebar.item icon="megaphone" :href="route('sponsors.index')"
+                        :current="request()->routeIs('sponsors.*')" wire:navigate>
+                        {{ __('Sponsors') }}
+                    </flux:sidebar.item>
                 </flux:sidebar.group>
             @endif
         </flux:sidebar.nav>

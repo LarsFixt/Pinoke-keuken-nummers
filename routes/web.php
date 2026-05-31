@@ -2,6 +2,7 @@
 
 use App\Http\Middleware\IsAdmin;
 use App\Http\Middleware\IsSuperAdmin;
+use App\Livewire\Admin\Sponsors\Index as SponsorsIndex;
 use Illuminate\Support\Facades\Route;
 
 Route::livewire('/', 'pages::display')->name('home');
@@ -19,6 +20,7 @@ Route::middleware(['auth', 'verified', IsAdmin::class])->group(function () {
 
 Route::middleware(['auth', 'verified', IsSuperAdmin::class])->group(function () {
     Route::livewire('users', 'pages::users')->name('users');
+    Route::livewire('sponsors', SponsorsIndex::class)->name('sponsors.index');
 });
 
 require __DIR__.'/settings.php';

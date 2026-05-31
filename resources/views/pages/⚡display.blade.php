@@ -5,19 +5,26 @@ use Livewire\Attributes\Computed;
 use Livewire\Attributes\Layout;
 use Livewire\Component;
 
-new #[Layout('layouts.guest')] class extends Component {
+new #[Layout('layouts.guest')] class extends Component
+{
     public string $kitchenStatus = '';
+
+    public int $concurrentSponsors = 1;
+
+    public int $recentOrdersCount = 0;
 
     public function mount(): void
     {
         $this->kitchenStatus = cache('kitchen_status', '');
+        $this->concurrentSponsors = max(1, min(6, (int) cache('display.concurrent_sponsors', 1)));
+        $this->recentOrdersCount = Order::ready()->latest()->take(9)->count();
     }
 
     public function getListeners()
     {
         return [
-            'echo:orders,OrderReady' => '$refresh',
-            'echo:orders,OrderCompleted' => '$refresh',
+            'echo:orders,OrderReady' => 'refreshOrders',
+            'echo:orders,OrderCompleted' => 'refreshOrders',
             'echo:orders,KitchenStatusUpdated' => 'updateStatus',
         ];
     }
@@ -27,16 +34,21 @@ new #[Layout('layouts.guest')] class extends Component {
         $this->kitchenStatus = $event['message'] ?? '';
     }
 
+    public function refreshOrders(): void
+    {
+        $this->recentOrdersCount = Order::ready()->latest()->take(9)->count();
+    }
+
     #[Computed]
     public function recentOrders()
     {
-        return Order::ready()->latest()->take(10)->get();
+        return Order::ready()->latest()->take(9)->get();
     }
 
     #[Computed]
     public function otherOrders()
     {
-        return Order::ready()->latest()->skip(10)->take(20)->get();
+        return Order::ready()->latest()->skip(9)->take(20)->get();
     }
 };
 ?>
@@ -51,7 +63,14 @@ new #[Layout('layouts.guest')] class extends Component {
     @push('twitter')
         <meta name="twitter:description" content="{{ __('Live overview of all orders that are ready for pick-up.') }}">
     @endpush
-    <div x-data="{ playSound() { new Audio('/sound/bell.mp3').play() } }" @echo:orders,OrderReady.window="playSound()">
+
+    @include('partials.display-ad-grid-block')
+
+    <div x-data="displayAdGridBlock({
+        adsEndpoint: @js(url('/api/ads?screen=kitchen')),
+        concurrentSponsors: @js($this->concurrentSponsors),
+    })" x-init="init()" @resize.window.debounce.150ms="handleResize()"
+        @beforeunload.window="destroyTimers()" x-on:echo:orders,OrderReady.window="playSound()">
 
         <div class="text-center mb-8">
             <flux:text class="text-5xl lg:text-7xl font-black tracking-tight uppercase text-center">
@@ -84,17 +103,68 @@ new #[Layout('layouts.guest')] class extends Component {
                 </flux:callout>
             </div>
         </div>
+        @if ($this->recentOrders->isNotEmpty())
+            <div class="mb-8 grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-5">
+                @foreach ($this->recentOrders as $order)
+                    <div wire:key="order-{{ $order->id }}" style="order: {{ $loop->iteration }}">
+                        <flux:card class="text-center flex h-75 flex-col items-center justify-center">
+                            <flux:text class="text-4xl md:text-7xl xl:text-9xl font-black tracking-tighter">
+                                {{ $order->number }}
+                            </flux:text>
+                        </flux:card>
+                    </div>
+                @endforeach
 
-        <div class="flex-1 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4 mb-8" x-transition>
-            <!-- RECENT CALLS (MAIN FOCUS) -->
-            @foreach ($this->recentOrders() as $index => $order)
-                <flux:card class="text-center flex flex-col items-center justify-center">
-                    <flux:text class="text-4xl md:text-7xl xl:text-9xl font-black tracking-tighter">
-                        {{ $order->number }}
+                <template x-for="(ad, adIndex) in visibleAds" :key="`ad-${activeAdIndex}-${adIndex}`">
+                    <div x-bind:style="'order: ' + (Math.min($wire.recentOrdersCount, columns) + adIndex + 1)">
+                        <flux:card class="flex h-75 flex-col gap-3 p-4"
+                            x-bind:class="ad.call_to_action ? 'cursor-pointer' : ''"
+                            x-on:click="if (ad.call_to_action) { window.open(ad.call_to_action, '_blank', 'noopener,noreferrer'); }"
+                            x-on:keydown.enter.prevent="if (ad.call_to_action) { window.open(ad.call_to_action, '_blank', 'noopener,noreferrer'); }"
+                            x-bind:tabindex="ad.call_to_action ? 0 : -1">
+                            <div class="h-full w-full overflow-hidden">
+                                <img :src="ad.image_url" :alt="ad.sponsor_name" class="h-full w-full object-contain"
+                                    loading="lazy" />
+                            </div>
+                            <div class="space-y-1 text-center">
+                                <flux:text x-show="ad.title" x-text="ad.title"></flux:text>
+                            </div>
+                        </flux:card>
+                    </div>
+                </template>
+            </div>
+        @else
+            <!-- Empty state -->
+            <div class="mb-15 flex flex-col items-center justify-center">
+                <div class="flex-1 flex flex-col items-center justify-center text-center">
+                    <flux:icon.chef-hat class="w-32 h-32 text-zinc-400 mb-8" />
+                    <flux:text class="text-3xl font-bold uppercase tracking-widest text-center">
+                        {{ __('Preparing Orders...') }}
                     </flux:text>
-                </flux:card>
-            @endforeach
-        </div>
+                </div>
+            </div>
+
+            <!-- Bigger sponsor overview when no orders are ready -->
+            <div class="mt-10" x-show="visibleAds.length > 0" x-transition>
+                <div class="flex flex-wrap justify-center gap-5">
+                    <template x-for="(sponsorAd, adIndex) in visibleAds" :key="`sponsor-${activeAdIndex}-${adIndex}`">
+                        <flux:card class="flex h-72 flex-col gap-4 p-5 w-full lg:w-1/2"
+                            x-bind:class="sponsorAd.call_to_action ? 'cursor-pointer' : ''"
+                            x-on:click="if (sponsorAd.call_to_action) { window.open(sponsorAd.call_to_action, '_blank', 'noopener,noreferrer'); }"
+                            x-on:keydown.enter.prevent="if (sponsorAd.call_to_action) { window.open(sponsorAd.call_to_action, '_blank', 'noopener,noreferrer'); }"
+                            x-bind:tabindex="sponsorAd.call_to_action ? 0 : -1">
+                            <div class="aspect-4/3 w-full overflow-hidden rounded-lg">
+                                <img :src="sponsorAd.image_url" :alt="sponsorAd.sponsor_name"
+                                    class="h-full w-full object-contain" loading="lazy" />
+                            </div>
+                            <div class="space-y-1 text-center">
+                                <flux:text x-show="sponsorAd.title" x-text="sponsorAd.title"></flux:text>
+                            </div>
+                        </flux:card>
+                    </template>
+                </div>
+            </div>
+        @endif
 
         <!-- OTHER READY ORDERS -->
         @if ($this->otherOrders()->count() > 0)
@@ -111,16 +181,6 @@ new #[Layout('layouts.guest')] class extends Component {
                         </flux:card>
                     @endforeach
                 </div>
-            </div>
-        @endif
-
-        <!-- Empty state -->
-        @if ($this->recentOrders()->count() === 0)
-            <div class="flex-1 flex flex-col items-center justify-center text-center">
-                <flux:icon.chef-hat class="w-32 h-32 text-zinc-400 mb-8" />
-                <flux:text class="text-3xl font-bold uppercase tracking-widest text-center">
-                    {{ __('Preparing Orders...') }}
-                </flux:text>
             </div>
         @endif
 
