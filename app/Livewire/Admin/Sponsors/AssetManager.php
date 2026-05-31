@@ -70,7 +70,6 @@ class AssetManager extends Component
         $this->sponsor->adAssets()->create([
             'file_path' => $processed['file_path'],
             'target_screen' => $validated['targetScreen'],
-            'size_format' => 'kitchen_1x1',
             'is_vertical' => $processed['is_vertical'],
             'duration_seconds' => $validated['durationSeconds'],
             'frequency_weight' => $validated['frequencyWeight'],
@@ -138,7 +137,8 @@ class AssetManager extends Component
         string $targetScreen,
         int $durationSeconds,
         int $frequencyWeight
-    ): void {
+    ): void
+    {
         if (array_key_exists($assetId, $this->assetSettings)) {
             return;
         }
