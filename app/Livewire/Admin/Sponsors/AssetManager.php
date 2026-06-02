@@ -137,8 +137,7 @@ class AssetManager extends Component
         string $targetScreen,
         int $durationSeconds,
         int $frequencyWeight
-    ): void
-    {
+    ): void {
         if (array_key_exists($assetId, $this->assetSettings)) {
             return;
         }
