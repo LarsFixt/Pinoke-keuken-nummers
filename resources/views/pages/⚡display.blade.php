@@ -5,8 +5,7 @@ use Livewire\Attributes\Computed;
 use Livewire\Attributes\Layout;
 use Livewire\Component;
 
-new #[Layout('layouts.guest')] class extends Component
-{
+new #[Layout('layouts.guest')] class extends Component {
     public string $kitchenStatus = '';
 
     public int $concurrentSponsors = 1;
@@ -135,32 +134,34 @@ new #[Layout('layouts.guest')] class extends Component
             </div>
         @else
             <!-- Empty state -->
-            <div class="mb-15 flex flex-col items-center justify-center">
-                <div class="flex-1 flex flex-col items-center justify-center text-center">
-                    <flux:icon.chef-hat class="w-32 h-32 text-zinc-400 mb-8" />
-                    <flux:text class="text-3xl font-bold uppercase tracking-widest text-center">
-                        {{ __('Preparing Orders...') }}
-                    </flux:text>
-                </div>
+            <div class="flex-1 flex flex-col items-center justify-center text-center">
+                <flux:icon.chef-hat class="w-32 h-32 text-zinc-400 mb-8" />
+                <flux:text class="text-3xl font-bold uppercase tracking-widest text-center">
+                    {{ __('Preparing Orders...') }}
+                </flux:text>
             </div>
 
             <!-- Bigger sponsor overview when no orders are ready -->
             <div class="mt-10" x-show="visibleAds.length > 0" x-transition>
                 <div class="flex flex-wrap justify-center gap-5">
                     <template x-for="(sponsorAd, adIndex) in visibleAds" :key="`sponsor-${activeAdIndex}-${adIndex}`">
-                        <flux:card class="flex h-72 flex-col gap-4 p-5 w-full lg:w-1/2"
+
+                        <flux:card class="flex flex-col gap-4 p-5 w-full lg:w-1/2" style="height: 328px; width: 50%;"
                             x-bind:class="sponsorAd.call_to_action ? 'cursor-pointer' : ''"
                             x-on:click="if (sponsorAd.call_to_action) { window.open(sponsorAd.call_to_action, '_blank', 'noopener,noreferrer'); }"
                             x-on:keydown.enter.prevent="if (sponsorAd.call_to_action) { window.open(sponsorAd.call_to_action, '_blank', 'noopener,noreferrer'); }"
                             x-bind:tabindex="sponsorAd.call_to_action ? 0 : -1">
-                            <div class="aspect-4/3 w-full overflow-hidden rounded-lg">
-                                <img :src="sponsorAd.image_url" :alt="sponsorAd.sponsor_name"
-                                    class="h-full w-full object-contain" loading="lazy" />
+
+                            <div class="flex-1 w-full" style="min-height: 0;">
+                                <img :src="sponsorAd.image_url" class="w-full h-full object-contain" />
                             </div>
-                            <div class="space-y-1 text-center">
+
+                            <div class="space-y-1 text-center shrink-0">
                                 <flux:text x-show="sponsorAd.title" x-text="sponsorAd.title"></flux:text>
                             </div>
+
                         </flux:card>
+
                     </template>
                 </div>
             </div>
