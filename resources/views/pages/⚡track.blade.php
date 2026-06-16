@@ -422,7 +422,7 @@ new #[Layout('layouts::guest')] class extends Component {
                     <div
                         class="text-center mb-6 h-20 flex items-center justify-center bg-gray-100 rounded-xl dark:bg-zinc-800">
                         <span class="text-5xl font-black text-gray-900 dark:text-gray-100 tracking-wider"
-                            x-text="localNumber || '...'">
+                            x-text="localNumber || '....'">
                         </span>
                     </div>
 

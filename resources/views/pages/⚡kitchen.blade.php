@@ -89,11 +89,11 @@ new class extends Component {
     <div class="flex gap-6 flex-col lg:flex-row">
         <!-- Numpad Section -->
         <div class="flex-1 w-full max-w-sm mx-auto">
-            <flux:card x-data="{ currentNumber: '' }">
+            <flux:card x-data="{ currentNumber: '0' }">
                 <div
-                    class="text-center mb-6 h-24 flex items-center justify-center bg-gray-100 rounded-xl dark:bg-zinc-800">
-                    <span class="text-6xl font-black text-gray-900 dark:text-gray-100 tracking-wider"
-                        x-text="currentNumber || '....'">
+                    class="text-center mb-6 h-24 flex items-center justify-center bg-zinc-100 rounded-xl dark:bg-zinc-800">
+                    <span class="text-6xl font-black text-zinc-900 dark:text-zinc-100 tracking-wider"
+                        x-text="(currentNumber == '0' ? '0...' : currentNumber)">
                     </span>
                 </div>
 
@@ -111,8 +111,12 @@ new class extends Component {
                     <flux:button @click="if (currentNumber.length < 4) currentNumber += '0'" class="h-20 text-3xl!">
                         0
                     </flux:button>
-                    <flux:button @click="$wire.callOrder(currentNumber); currentNumber = ''" variant="primary"
-                        color="green" class="h-20 text-xl!">
+                    <flux:button @click="currentNumber = currentNumber.slice(0, -1)" variant="primary" color="amber"
+                        class="h-20 text-xl!">
+                        {{ __('Back') }}
+                    </flux:button>
+                    <flux:button @click="$wire.callOrder(currentNumber); currentNumber = '0'" variant="primary"
+                        color="green" class="h-20 text-xl! col-span-full">
                         {{ __('Call') }}
                     </flux:button>
                 </div>
@@ -123,16 +127,46 @@ new class extends Component {
         <div class="flex-1">
             <flux:card>
                 <flux:heading size="xl">{{ __('Ready orders') }}</flux:heading>
-                <flux:subheading class="mb-4">{{ __('Tap an order to mark it as complete.') }}</flux:subheading>
+                <flux:subheading class="mb-4">{{ __('Tap an order to mark it as picked up.') }}</flux:subheading>
 
                 <div class="grid grid-cols-2 sm:grid-cols-3 gap-4">
                     @forelse($this->readyOrders as $order)
-                        <flux:button wire:click="completeOrder({{ $order->id }})" variant="primary" color="green"
-                            icon:trailing="{{ $order->push_subscriptions_count > 0 ? 'device-phone-mobile' : '' }}"
-                            title="{{ $order->push_subscriptions_count > 0 ? __('Push linked') : '' }}"
-                            class="w-full h-16 text-3xl! font-black!">
-                            {{ $order->number }}
-                        </flux:button>
+                        <div wire:key="ready-order-{{ $order->id }}" x-data="{
+                            elapsed: {{ max(0, $order->updated_at->diffInSeconds(now())) }},
+                            timer: null,
+                            get colorClasses() {
+                                if (this.elapsed >= 210) return '!bg-red-500 !text-white hover:!bg-red-600';
+                                if (this.elapsed >= 120) return '!bg-orange-500 !text-white hover:!bg-orange-600';
+                                if (this.elapsed >= 90) return '!bg-amber-500 !text-white hover:!bg-amber-600';
+                                if (this.elapsed >= 60) return '!bg-yellow-400 !text-yellow-900 hover:!bg-yellow-500';
+                                if (this.elapsed >= 30) return '!bg-lime-400 !text-lime-900 hover:!bg-lime-500';
+                                return '!bg-green-500 !text-white hover:!bg-green-600';
+                            },
+                            init() {
+                                // If it loads already past 4 minutes, complete it immediately
+                                if (this.elapsed >= 240) {
+                                    $wire.completeOrder({{ $order->id }});
+                                    return;
+                                }
+                        
+                                // Tick every 1 second
+                                this.timer = setInterval(() => {
+                                    this.elapsed += 1;
+                                    if (this.elapsed >= 240) {
+                                        clearInterval(this.timer);
+                                        $wire.completeOrder({{ $order->id }});
+                                    }
+                                }, 1000);
+                            }
+                        }">
+                            <flux:button wire:click="completeOrder({{ $order->id }})" variant="primary"
+                                icon:trailing="{{ $order->push_subscriptions_count > 0 ? 'device-phone-mobile' : '' }}"
+                                title="{{ $order->push_subscriptions_count > 0 ? __('Push linked') : '' }}"
+                                class="w-full h-16 text-3xl! font-black! transition-colors duration-500 ease-in-out !border-none"
+                                x-bind:class="colorClasses">
+                                {{ $order->number }}
+                            </flux:button>
+                        </div>
                     @empty
                         <flux:text size="lg" class="col-span-full text-center py-8">
                             {{ __('No orders currently ready.') }}

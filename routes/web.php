@@ -16,6 +16,7 @@ Route::livewire('/track', 'pages::track')->name('track');
 Route::middleware(['auth', 'verified', IsAdmin::class])->group(function () {
     Route::livewire('dashboard', 'pages::kitchen')->name('dashboard');
     Route::livewire('messages', 'pages::messages')->name('messages');
+    Route::livewire('tv-control', 'pages::screen')->name('tv-control');
 });
 
 Route::middleware(['auth', 'verified', IsSuperAdmin::class])->group(function () {

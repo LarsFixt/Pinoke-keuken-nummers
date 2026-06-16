@@ -106,7 +106,7 @@ new #[Layout('layouts.guest')] class extends Component {
             <div class="mb-8 grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-5">
                 @foreach ($this->recentOrders as $order)
                     <div wire:key="order-{{ $order->id }}" style="order: {{ $loop->iteration }}">
-                        <flux:card class="text-center flex h-75 flex-col items-center justify-center">
+                        <flux:card class="text-center flex h-55 flex-col items-center justify-center">
                             <flux:text class="text-4xl md:text-7xl xl:text-9xl font-black tracking-tighter">
                                 {{ $order->number }}
                             </flux:text>
@@ -116,7 +116,7 @@ new #[Layout('layouts.guest')] class extends Component {
 
                 <template x-for="(ad, adIndex) in visibleAds" :key="`ad-${activeAdIndex}-${adIndex}`">
                     <div x-bind:style="'order: ' + (Math.min($wire.recentOrdersCount, columns) + adIndex + 1)">
-                        <flux:card class="flex h-75 flex-col gap-3 p-4"
+                        <flux:card class="flex h-55 flex-col gap-3 p-4"
                             x-bind:class="ad.call_to_action ? 'cursor-pointer' : ''"
                             x-on:click="if (ad.call_to_action) { window.open(ad.call_to_action, '_blank', 'noopener,noreferrer'); }"
                             x-on:keydown.enter.prevent="if (ad.call_to_action) { window.open(ad.call_to_action, '_blank', 'noopener,noreferrer'); }"
@@ -169,11 +169,9 @@ new #[Layout('layouts.guest')] class extends Component {
 
         <!-- OTHER READY ORDERS -->
         @if ($this->otherOrders()->count() > 0)
-            <div class="mt-auto">
-
-                <flux:separator text="{{ __('Also Ready') }}" text-size="text-2xl" />
-
-                <div class="flex flex-wrap justify-center gap-4 mt-4">
+            <div class="mt-auto lg:mt-4 max-w-lg">
+                <flux:heading size="xl">{{ __('Also Ready') }}</flux:heading>
+                <div class="flex flex-wrap justify-start gap-4 mt-4">
                     @foreach ($this->otherOrders() as $order)
                         <flux:card>
                             <flux:text class="text-2xl md:text-6xl font-bold">

@@ -37,22 +37,30 @@ new class extends Component {
 ?>
 
 <div>
+
+    <div class="hidden md:block relative mb-6 w-full">
+        <flux:heading size="xl" level="1">{{ __('TV Control') }}</flux:heading>
+        <flux:subheading size="lg" class="mb-6">{{ __('Manage your TV screens') }}
+        </flux:subheading>
+        <flux:separator variant="subtle" />
+    </div>
+
     <flux:card>
         <div class="flex items-center justify-between">
             <div>
-                <flux:heading size="lg">TV Display</flux:heading>
-                <flux:subheading>Control the physical screen in the kitchen</flux:subheading>
+                <flux:heading size="lg">{{ __('TV Control') }}</flux:heading>
+                <flux:subheading>{{ __('Control the screen above the pickup counter') }}</flux:subheading>
             </div>
 
-            <div class="flex items-center gap-2">
+            <div class="flex flex-col md:flex-row items-center gap-2">
                 <flux:button wire:click="toggle('on')"
                     variant="{{ $this->state['status'] === 'on' ? 'primary' : 'outline' }}" icon="check-circle">
-                    Screen On
+                    {{ __('Screen On') }}
                 </flux:button>
 
                 <flux:button wire:click="toggle('off')"
                     variant="{{ $this->state['status'] === 'off' ? 'danger' : 'outline' }}" icon="power">
-                    Screen Off
+                    {{ __('Screen Off') }}
                 </flux:button>
 
                 <!-- Only visible to Super Admins -->
@@ -60,8 +68,8 @@ new class extends Component {
                     <flux:separator vertical class="mx-2" />
 
                     <flux:button wire:click="reboot" variant="subtle" icon="arrow-path"
-                        wire:confirm="Are you sure you want to reboot the kitchen display?">
-                        Reboot player
+                        wire:confirm="{{ __('Are you sure you want to reboot the kitchen display?') }}">
+                        {{ __('Reboot player') }}
                     </flux:button>
                 @endif
             </div>

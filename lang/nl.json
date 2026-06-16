@@ -5,7 +5,7 @@
     "Ready for pick-up": "Klaar om op te halen",
     "Scan to view on your phone": "Scan om op je telefoon te bekijken",
     "Also Ready": "Al langer klaar",
-    "Preparing Orders...": "Bestellingen in voorbereiding...",
+    "Preparing Orders...": "Bestellingen worden bereid...",
     "Track your order": "Volg je bestelling",
     "Enter your number and we will let you know when your food is ready.": "Vul je nummer in en we laten het je weten als je eten klaarstaat.",
     "Your order is ready!": "Je bestelling is klaar!",
@@ -24,7 +24,7 @@
     "Call": "Roepen",
     "Ready orders": "Klaarstaande bestellingen",
     "Tap to complete": "Tik om af te ronden",
-    "Tap an order to mark it as complete.": "Tik op een bestelling om deze als gereed te markeren.",
+    "Tap an order to mark it as picked up.": "Tik op een bestelling om deze als opgehaald te markeren.",
     "No orders currently ready.": "Nog geen bestellingen klaar.",
     "Status message": "Statusbericht",
     "Remove message": "Bericht verwijderen",
@@ -73,5 +73,13 @@
     "Asset deleted.": "Media verwijderd.",
     "Assed uploaded.": "Media geüpload.",
     "Sponsor saved.": "Sponsor opgeslagen.",
-    "Display settings saved.": "Weergave-instellingen opgeslagen."
+    "Display settings saved.": "Weergave-instellingen opgeslagen.",
+    "Back": "Terug",
+    "TV Control": "TV-instellingen",
+    "Manage your TV screens": "Beheer de TV-instellingen",
+    "Control the screen above the pickup counter": "Beheer het scherm boven de uitgiftebalie",
+    "Screen On": "Scherm aan",
+    "Screen Off": "Scherm uit",
+    "Reboot player": "Herstart speler",
+    "Are you sure you want to reboot the kitchen display?": "Weet je zeker dat je het keukenscherm wilt herstarten?"
 }
