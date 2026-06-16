@@ -35,6 +35,32 @@ it('allows anyone to view the public display screen', function () {
     $this->get(route('home'))->assertStatus(200);
 });
 
+it('includes ad playlist fetch logic on the display screen', function () {
+    $this->get(route('home'))
+        ->assertOk()
+        ->assertSee('adsEndpoint:', false)
+        ->assertSee('fetch(this.adsEndpoint', false);
+});
+
+it('renders order tiles as Blade-rendered elements when orders are ready', function () {
+    Order::factory()->create(['number' => '42', 'status' => OrderStatus::Ready]);
+
+    $this->get(route('home'))
+        ->assertOk()
+        ->assertSee('wire:key="order-', false)
+        ->assertSee('$wire.recentOrdersCount', false)
+        ->assertSee('in visibleAds', false)
+        ->assertSee('window.open(ad.call_to_action', false);
+});
+
+it('shows empty state and sponsor overview when no orders are ready', function () {
+    $this->get(route('home'))
+        ->assertOk()
+        ->assertSee('Preparing Orders', false)
+        ->assertSee('x-show="visibleAds.length > 0"', false)
+        ->assertSee('window.open(sponsorAd.call_to_action', false);
+});
+
 it('can call an order from the kitchen', function () {
     Event::fake([OrderReady::class]);
 

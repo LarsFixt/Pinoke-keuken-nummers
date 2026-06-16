@@ -35,4 +35,8 @@ return [
         ],
     ],
 
+    'kiosk' => [
+        'token' => env('KIOSK_API_TOKEN'),
+    ],
+
 ];
