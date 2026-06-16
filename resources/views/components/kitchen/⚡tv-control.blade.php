@@ -45,13 +45,13 @@ new class extends Component {
             </div>
 
             <div class="flex items-center gap-2">
-                <flux:button wire:click="toggle('on')" variant="{{ $status === 'on' ? 'primary' : 'outline' }}"
-                    icon="check-circle">
+                <flux:button wire:click="toggle('on')"
+                    variant="{{ $this->state['status'] === 'on' ? 'primary' : 'outline' }}" icon="check-circle">
                     Screen On
                 </flux:button>
 
-                <flux:button wire:click="toggle('off')" variant="{{ $status === 'off' ? 'danger' : 'outline' }}"
-                    icon="power">
+                <flux:button wire:click="toggle('off')"
+                    variant="{{ $this->state['status'] === 'off' ? 'danger' : 'outline' }}" icon="power">
                     Screen Off
                 </flux:button>
 

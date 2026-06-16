@@ -94,4 +94,8 @@ new class extends Component {
             @endforeach
         </div>
     </div>
+
+    <div>
+        <livewire:kitchen.tv-control />
+    </div>
 </div>
