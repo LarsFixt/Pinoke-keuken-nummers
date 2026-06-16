@@ -27,7 +27,7 @@ new class extends Component {
     {
         if (auth()->user()->is_super_admin) {
             // Store in cache so the Pi knows the state if it reboots
-            Cache::put('kiosk_tv_status', 'reboot');
+            Cache::put('kiosk_tv_status', 'on');
 
             // Instantly push the event via Reverb to the Raspberry Pi
             broadcast(new TvStatusUpdated('reboot'));
