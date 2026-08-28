@@ -5,13 +5,10 @@ declare(strict_types=1);
 namespace App\Services;
 
 use Illuminate\Http\UploadedFile;
+use Illuminate\Image\Image;
+use Illuminate\Support\Facades\Image as ImageFacade;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
-use Intervention\Image\Drivers\Gd\Driver as GdDriver;
-use Intervention\Image\Drivers\Imagick\Driver as ImagickDriver;
-use Intervention\Image\Encoders\AvifEncoder;
-use Intervention\Image\ImageManager;
-use Intervention\Image\Interfaces\ImageManagerInterface;
 use InvalidArgumentException;
 use RuntimeException;
 use Throwable;
@@ -30,20 +27,16 @@ class AdImageProcessor
             return $this->storeSvg($file);
         }
 
-        $sourcePath = $file->getRealPath();
-        if (! is_string($sourcePath) || $sourcePath === '') {
-            throw new InvalidArgumentException('Uploaded file path could not be resolved.');
-        }
-
-        $image = $this->imageManager()->decodePath($sourcePath)->orient();
+        $image = $this->selectDriver(ImageFacade::fromUpload($file))->orient();
 
         $isVertical = $image->height() > $image->width();
 
-        $encodedImage = $image->encode(new AvifEncoder(quality: 80));
+        $filePath = $image->toAvif()->quality(80)
+            ->storePubliclyAs('ads', sprintf('%s.avif', Str::uuid()), 'public');
 
-        $filePath = sprintf('ads/%s.avif', (string) Str::uuid());
-
-        Storage::disk('public')->put($filePath, $encodedImage->toString(), 'public');
+        if ($filePath === false) {
+            throw new RuntimeException('Failed to store the processed ad image.');
+        }
 
         return [
             'file_path' => $filePath,
@@ -122,12 +115,17 @@ class AdImageProcessor
         return null;
     }
 
-    private function imageManager(): ImageManagerInterface
+    /**
+     * Prefer whichever driver actually supports AVIF encoding: Imagick when it
+     * reports AVIF support, GD when it exposes imageavif(), then Imagick as a
+     * last resort so decode-only Imagick installs still surface a clear error.
+     */
+    private function selectDriver(Image $image): Image
     {
         if (extension_loaded('imagick') && class_exists(\Imagick::class)) {
             try {
                 if (in_array('AVIF', \Imagick::queryFormats(), true)) {
-                    return ImageManager::usingDriver(ImagickDriver::class);
+                    return $image->usingImagick();
                 }
             } catch (Throwable) {
                 // Fall through to GD if available.
@@ -135,11 +133,11 @@ class AdImageProcessor
         }
 
         if (function_exists('imageavif')) {
-            return ImageManager::usingDriver(GdDriver::class);
+            return $image->usingGd();
         }
 
         if (extension_loaded('imagick')) {
-            return ImageManager::usingDriver(ImagickDriver::class);
+            return $image->usingImagick();
         }
 
         throw new RuntimeException('AVIF encoding is not supported by the current PHP image drivers.');

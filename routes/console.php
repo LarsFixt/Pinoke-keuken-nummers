@@ -14,4 +14,4 @@ Artisan::command('inspire', function () {
 Schedule::job(PruneExpiredOrderPushSubscriptions::class)->everyMinute();
 
 // Remove completed orders that are older than 24 hours.
-Schedule::job(PruneCompletedOrders::class)->daily();
+Schedule::job(PruneCompletedOrders::class)->dailyAt('03:00')->timezone('Europe/Amsterdam');
