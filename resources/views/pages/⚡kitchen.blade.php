@@ -23,7 +23,7 @@ new class extends Component {
     {
         $number = trim($number);
 
-        $validator = Validator::make(['number' => $number], ['number' => ['required', 'string', 'max:4', 'regex:/^[0-9]+$/']]);
+        $validator = Validator::make(['number' => $number], ['number' => ['required', 'string', 'max:4', 'regex:/^[1-9][0-9]{0,3}$/']]);
 
         if ($validator->fails()) {
             return;

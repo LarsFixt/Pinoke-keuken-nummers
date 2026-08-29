@@ -35,6 +35,22 @@ it('allows anyone to view the public display screen', function () {
     $this->get(route('home'))->assertStatus(200);
 });
 
+it('redirects admin users from public display to dashboard', function () {
+    $user = User::factory()->create(['is_admin' => true]);
+
+    $this->actingAs($user)
+        ->get(route('home'))
+        ->assertRedirect(route('dashboard'));
+});
+
+it('allows non-admin authenticated users to stay on public display', function () {
+    $user = User::factory()->create(['is_admin' => false]);
+
+    $this->actingAs($user)
+        ->get(route('home'))
+        ->assertOk();
+});
+
 it('includes ad playlist fetch logic on the display screen', function () {
     $this->get(route('home'))
         ->assertOk()
@@ -56,7 +72,6 @@ it('renders order tiles as Blade-rendered elements when orders are ready', funct
 it('shows empty state and sponsor overview when no orders are ready', function () {
     $this->get(route('home'))
         ->assertOk()
-        ->assertSee('Preparing Orders', false)
         ->assertSee('x-show="visibleAds.length > 0"', false)
         ->assertSee('window.open(sponsorAd.call_to_action', false);
 });
@@ -93,6 +108,23 @@ it('can call a four-digit order from the kitchen', function () {
     ]);
 
     Event::assertDispatched(OrderReady::class);
+});
+
+it('cannot call order number zero from the kitchen', function () {
+    Event::fake([OrderReady::class]);
+
+    $user = User::factory()->create(['is_admin' => true]);
+
+    Livewire::actingAs($user)
+        ->test('pages::kitchen')
+        ->call('callOrder', '0');
+
+    $this->assertDatabaseMissing('orders', [
+        'number' => '0',
+        'status' => 'ready',
+    ]);
+
+    Event::assertNotDispatched(OrderReady::class);
 });
 
 it('can complete an order from the kitchen', function () {

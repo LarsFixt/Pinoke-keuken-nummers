@@ -14,6 +14,12 @@ new #[Layout('layouts.guest')] class extends Component {
 
     public function mount(): void
     {
+        if (auth()->check() && auth()->user()->is_admin) {
+            $this->redirectRoute('dashboard');
+
+            return;
+        }
+
         $this->kitchenStatus = cache('kitchen_status', '');
         $this->concurrentSponsors = max(1, min(6, (int) cache('display.concurrent_sponsors', 1)));
         $this->recentOrdersCount = Order::ready()->latest()->take(9)->count();
@@ -134,13 +140,6 @@ new #[Layout('layouts.guest')] class extends Component {
             </div>
         @else
             <!-- Empty state -->
-            <div class="flex-1 flex flex-col items-center justify-center text-center">
-                <flux:icon.chef-hat class="w-32 h-32 text-zinc-400 mb-8" />
-                <flux:text class="text-3xl font-bold uppercase tracking-widest text-center">
-                    {{ __('Preparing Orders...') }}
-                </flux:text>
-            </div>
-
             <!-- Bigger sponsor overview when no orders are ready -->
             <div class="mt-10" x-show="visibleAds.length > 0" x-transition>
                 <div class="flex flex-wrap justify-center gap-5">
