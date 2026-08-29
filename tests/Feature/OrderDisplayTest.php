@@ -110,6 +110,23 @@ it('can call a four-digit order from the kitchen', function () {
     Event::assertDispatched(OrderReady::class);
 });
 
+it('can call an order number with leading zero from the kitchen', function () {
+    Event::fake([OrderReady::class]);
+
+    $user = User::factory()->create(['is_admin' => true]);
+
+    Livewire::actingAs($user)
+        ->test('pages::kitchen')
+        ->call('callOrder', '012');
+
+    $this->assertDatabaseHas('orders', [
+        'number' => '012',
+        'status' => 'ready',
+    ]);
+
+    Event::assertDispatched(OrderReady::class);
+});
+
 it('cannot call order number zero from the kitchen', function () {
     Event::fake([OrderReady::class]);
 

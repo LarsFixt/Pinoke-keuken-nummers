@@ -3,14 +3,15 @@
 use App\Events\OrderCompleted;
 use App\Events\OrderReady;
 use App\Models\Order;
-use App\OrderStatus;
 use App\Notifications\OrderReadyNotification;
+use App\OrderStatus;
+use Flux\Flux;
 use Illuminate\Support\Facades\Validator;
 use Livewire\Attributes\Computed;
-use Flux\Flux;
 use Livewire\Component;
 
-new class extends Component {
+new class extends Component
+{
     public function getListeners()
     {
         return [
@@ -23,7 +24,7 @@ new class extends Component {
     {
         $number = trim($number);
 
-        $validator = Validator::make(['number' => $number], ['number' => ['required', 'string', 'max:4', 'regex:/^[1-9][0-9]{0,3}$/']]);
+        $validator = Validator::make(['number' => $number], ['number' => ['required', 'string', 'max:4', 'regex:/^[0-9]+$/', 'not_in:0']]);
 
         if ($validator->fails()) {
             return;
