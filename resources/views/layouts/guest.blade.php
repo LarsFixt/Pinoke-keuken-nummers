@@ -40,9 +40,9 @@
 
     <link rel="preconnect" href="https://fonts.bunny.net">
     <link href="https://fonts.bunny.net/css?family=inter:400,500,600&display=swap" rel="stylesheet" />
-    @if (app()->isProduction())
+    @production
         <script defer src="https://cloud.umami.is/script.js" data-website-id="bc315229-babf-4984-a17b-d0cf6ba4fe3e"></script>
-    @endif
+    @endproduction
     @fluxAppearance()
 </head>
 
