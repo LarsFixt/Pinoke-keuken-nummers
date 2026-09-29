@@ -41,7 +41,7 @@
     <link rel="preconnect" href="https://fonts.bunny.net">
     <link href="https://fonts.bunny.net/css?family=inter:400,500,600&display=swap" rel="stylesheet" />
     @production
-        <script defer src="https://cloud.umami.is/script.js" data-website-id="bc315229-babf-4984-a17b-d0cf6ba4fe3e"></script>
+        <script defer src="https://umami.larsfixt.nl/script.js" data-website-id="057c461e-d015-4a5b-bce9-4b64757ede84"></script>
     @endproduction
     @fluxAppearance()
 </head>
@@ -56,8 +56,13 @@
 </body>
 
 <flux:footer class="text-center mt-auto">
-    <flux:text size="xl" variant="subtle">Powered by DJMRY &amp; <flux:link href="https://github.com/LarsFixt">
-            LarsFixt</flux:link>
+    <flux:text size="xl" variant="subtle">Powered by
+        <flux:link href="https://mryav.nl">MRY AV</flux:link> &amp;
+        <flux:link href="https://larsfixt.nl" class="inline-flex items-center align-middle" aria-label="LarsFixt">
+            <img src="{{ asset('assets/larsfixt-logo.svg') }}" alt="LarsFixt" class="h-8 w-auto dark:hidden">
+            <img src="{{ asset('assets/larsfixt-logo-reversed.svg') }}" alt="LarsFixt"
+                class="hidden h-8 w-auto dark:block">
+        </flux:link>
     </flux:text>
 </flux:footer>
 
