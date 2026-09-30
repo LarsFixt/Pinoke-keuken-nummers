@@ -47,28 +47,36 @@
 </head>
 
 
-<body class="flex-1 flex flex-col min-h-95vh">
-    <div>
+<body class="min-h-dvh flex flex-col">
+    <div class="flex-1">
         {{ $slot }}
     </div>
+
+    <flux:footer class="mt-auto shrink-0 text-center pb-4">
+        <flux:text size="xl" variant="subtle">
+            Powered by
+
+            <flux:link href="https://larsfixt.nl"
+                class="inline-flex items-center align-middle"
+                aria-label="LarsFixt">
+                <img src="{{ asset('assets/larsfixt-logo.svg') }}"
+                    alt="LarsFixt" class="h-8 w-auto dark:hidden px-2">
+                <img src="{{ asset('assets/larsfixt-logo-reversed.svg') }}"
+                    alt="LarsFixt" class="hidden h-10 w-auto dark:block px-2">
+            </flux:link>
+
+            <span class="mx-1">|</span>
+
+            <flux:link href="https://mryav.nl"
+                class="inline-flex items-center align-middle"
+                aria-label="MRY AV">
+                <img src="{{ asset('assets/mryav_logo.png') }}"
+                    alt="MRY AV" class="h-20 w-auto">
+            </flux:link>
+        </flux:text>
+    </flux:footer>
+
     @livewireScripts
     @fluxScripts
-
-<flux:footer class="text-center mt-auto">
-    <flux:text size="xl" variant="subtle">Powered by
-        <flux:link href="https://larsfixt.nl" class="inline-flex items-center align-middle" aria-label="LarsFixt">
-            <img src="{{ asset('assets/larsfixt-logo.svg') }}" alt="LarsFixt" class="h-8 w-auto dark:hidden px-2">
-            <img src="{{ asset('assets/larsfixt-logo-reversed.svg') }}" alt="LarsFixt"
-                class="hidden h-8 w-auto dark:block px-2">
-        </flux:link>
-            <span class="mx-1">|</span>
-        <flux:link href="https://mryav.nl" class="inline-flex items-center align-middle" aria-label="MRY AV">
-            <img src="{{ asset('assets/mryav_logo.png') }}" alt="MRY AV" class="h-18 w-auto dark:hidden">
-            <img src="{{ asset('assets/mryav_logo.png') }}" alt="MRY AV"
-                class="hidden h-18 w-auto dark:block">
-        </flux:link>
-    </flux:text>
-</flux:footer>
 </body>
-
 </html>
