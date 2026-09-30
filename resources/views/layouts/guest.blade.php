@@ -62,7 +62,7 @@
             <img src="{{ asset('assets/larsfixt-logo-reversed.svg') }}" alt="LarsFixt"
                 class="hidden h-8 w-auto dark:block">
         </flux:link>
-        <flux:link href="https://mryav.nl" class="inline-flex items-center align-middle" aria-label="LarsFixt">
+        <flux:link href="https://mryav.nl" class="inline-flex items-center align-middle" aria-label="MRY AV">
             <img src="{{ asset('assets/mryav_logo.png') }}" alt="MRY AV" class="h-8 w-auto dark:hidden">
         </flux:link>
     </flux:text>
