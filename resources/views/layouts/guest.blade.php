@@ -71,7 +71,7 @@
                 class="inline-flex items-center align-middle"
                 aria-label="MRY AV">
                 <img src="{{ asset('assets/mryav_logo.png') }}"
-                    alt="MRY AV" class="h-10 w-auto">
+                    alt="MRY AV" class="h-8 w-auto">
             </flux:link>
         </flux:text>
     </flux:footer>
