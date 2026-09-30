@@ -53,7 +53,6 @@
     </div>
     @livewireScripts
     @fluxScripts
-</body>
 
 <flux:footer class="text-center mt-auto">
     <flux:text size="xl" variant="subtle">Powered by
@@ -70,5 +69,6 @@
         </flux:link>
     </flux:text>
 </flux:footer>
+</body>
 
 </html>
