@@ -58,9 +58,9 @@
 <flux:footer class="text-center mt-auto">
     <flux:text size="xl" variant="subtle">Powered by
         <flux:link href="https://larsfixt.nl" class="inline-flex items-center align-middle" aria-label="LarsFixt">
-            <img src="{{ asset('assets/larsfixt-logo.svg') }}" alt="LarsFixt" class="h-8 w-auto dark:hidden">
+            <img src="{{ asset('assets/larsfixt-logo.svg') }}" alt="LarsFixt" class="h-8 w-auto dark:hidden px-2">
             <img src="{{ asset('assets/larsfixt-logo-reversed.svg') }}" alt="LarsFixt"
-                class="hidden h-8 w-auto dark:block">
+                class="hidden h-8 w-auto dark:block px-2">
         </flux:link>
             <span class="mx-1">|</span>
         <flux:link href="https://mryav.nl" class="inline-flex items-center align-middle" aria-label="MRY AV">
