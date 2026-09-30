@@ -52,26 +52,20 @@
         {{ $slot }}
     </div>
 
-    <flux:footer class="mt-auto shrink-0 text-center pb-4">
+    <flux:footer class="shrink-0 text-center p-2!">
         <flux:text size="xl" variant="subtle">
             Powered by
 
-            <flux:link href="https://larsfixt.nl"
-                class="inline-flex items-center align-middle"
-                aria-label="LarsFixt">
-                <img src="{{ asset('assets/larsfixt-logo.svg') }}"
-                    alt="LarsFixt" class="h-8 w-auto dark:hidden px-2">
-                <img src="{{ asset('assets/larsfixt-logo-reversed.svg') }}"
-                    alt="LarsFixt" class="hidden h-10 w-auto dark:block px-2">
+            <flux:link href="https://larsfixt.nl" class="inline-flex items-center align-middle" aria-label="LarsFixt">
+                <img src="{{ asset('assets/larsfixt-logo.svg') }}" alt="LarsFixt" class="h-8 w-auto dark:hidden px-2">
+                <img src="{{ asset('assets/larsfixt-logo-reversed.svg') }}" alt="LarsFixt"
+                    class="hidden h-10 w-auto dark:block px-2">
             </flux:link>
 
             <span class="mx-1">|</span>
 
-            <flux:link href="https://mryav.nl"
-                class="inline-flex items-center align-middle"
-                aria-label="MRY AV">
-                <img src="{{ asset('assets/mryav_logo.png') }}"
-                    alt="MRY AV" class="h-8 w-auto">
+            <flux:link href="https://mryav.nl" class="inline-flex items-center align-middle" aria-label="MRY AV">
+                <img src="{{ asset('assets/mryav_logo.png') }}" alt="MRY AV" class="h-8 w-auto">
             </flux:link>
         </flux:text>
     </flux:footer>
@@ -79,4 +73,5 @@
     @livewireScripts
     @fluxScripts
 </body>
+
 </html>
