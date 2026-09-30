@@ -62,10 +62,13 @@
             <img src="{{ asset('assets/larsfixt-logo-reversed.svg') }}" alt="LarsFixt"
                 class="hidden h-8 w-auto dark:block">
         </flux:link>
+        <p>
+            <span class="mx-1">|</span>
+        </p>
         <flux:link href="https://mryav.nl" class="inline-flex items-center align-middle" aria-label="MRY AV">
-            <img src="{{ asset('assets/mryav_logo.png') }}" alt="MRY AV" class="h-8 w-auto dark:hidden">
+            <img src="{{ asset('assets/mryav_logo.png') }}" alt="MRY AV" class="h-16 w-auto dark:hidden">
             <img src="{{ asset('assets/mryav_logo.png') }}" alt="MRY AV"
-                class="hidden h-8 w-auto dark:block">
+                class="hidden h-16 w-auto dark:block">
         </flux:link>
     </flux:text>
 </flux:footer>
