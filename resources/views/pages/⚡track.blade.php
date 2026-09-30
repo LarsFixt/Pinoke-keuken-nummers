@@ -190,6 +190,9 @@ new #[Layout('layouts::guest')] class extends Component {
     
             this.notificationMode = 'permission-needed';
         },
+        trackEvent(name, data = undefined) {
+            window.umami?.track(name, data);
+        },
         dismissInstallTip() {
             this.installTipDismissed = true;
             window.localStorage.setItem('track_install_tip_dismissed', '1');
@@ -201,6 +204,7 @@ new #[Layout('layouts::guest')] class extends Component {
     
             await $wire.startWatching(this.localNumber);
             await this.activateBestNotificationAgent();
+            this.trackEvent('track-start', { mode: this.notificationMode });
             this.localNumber = '';
         },
         async activateBestNotificationAgent() {
@@ -223,6 +227,7 @@ new #[Layout('layouts::guest')] class extends Component {
     
             this.notificationPermission = await Notification.requestPermission();
             this.updateNotificationMode();
+            this.trackEvent('notification-permission', { result: this.notificationPermission });
         },
         async sendNotification(number) {
             if (!('Notification' in window) || Notification.permission !== 'granted') return;
@@ -285,8 +290,10 @@ new #[Layout('layouts::guest')] class extends Component {
     
                 $wire.subscribeToPush(endpoint, publicKey, authToken, contentEncoding);
                 this.pushLinkState = 'linked';
+                this.trackEvent('push-subscribed');
             } catch (e) {
                 this.pushLinkState = 'failed';
+                this.trackEvent('push-failed');
                 console.error('Push registration failed:', e);
             }
         },
@@ -310,7 +317,7 @@ new #[Layout('layouts::guest')] class extends Component {
             notifications.forEach(n => n.close());
         },
     }"
-        x-effect="if ($wire.orderReady && !notified) { notified = true; playSound(); sendNotification($wire.currentNumber); closePushNotifications(); }">
+        x-effect="if ($wire.orderReady && !notified) { notified = true; trackEvent('order-ready'); playSound(); sendNotification($wire.currentNumber); closePushNotifications(); }">
         <div class="text-center mb-8 w-full">
             <flux:breadcrumbs class="mb-4">
                 <flux:breadcrumbs.item href="{{ route('home') }}">{{ __('All orders') }}</flux:breadcrumbs.item>
@@ -342,7 +349,7 @@ new #[Layout('layouts::guest')] class extends Component {
                     <flux:text class="text-lg">
                         {{ __('Come pick up your food!') }}
                     </flux:text>
-                    <flux:button wire:click="stopTracking" variant="filled" class="mt-4 w-full">
+                    <flux:button wire:click="stopTracking" data-umami-event="track-another" variant="filled" class="mt-4 w-full">
                         {{ __('Track another order') }}
                     </flux:button>
                 </flux:card>
@@ -362,7 +369,7 @@ new #[Layout('layouts::guest')] class extends Component {
                     <flux:text class="text-sm">
                         {{ __('We will notify you as soon as it is ready.') }}
                     </flux:text>
-                    <flux:button wire:click="stopTracking" class="mt-4 w-full" size="sm">
+                    <flux:button wire:click="stopTracking" data-umami-event="track-cancel" class="mt-4 w-full" size="sm">
                         {{ __('Cancel') }}
                     </flux:button>
                 </flux:card>

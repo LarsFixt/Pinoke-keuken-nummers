@@ -100,7 +100,7 @@ new #[Layout('layouts.guest')] class extends Component {
                         {{ __('Scan the QR code, enter your order number, and enable notifications on your phone.') }}
                     </flux:callout.text>
                     <x-slot name="actions">
-                        <flux:button href="{{ route('track') }}">{{ __('Track your order') }}</flux:button>
+                        <flux:button href="{{ route('track') }}" data-umami-event="display-track-button">{{ __('Track your order') }}</flux:button>
                     </x-slot>
                     <x-slot name="controls">
                         <flux:button icon="x-mark" variant="ghost" x-on:click="visible = false" />
