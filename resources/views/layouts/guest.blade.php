@@ -41,7 +41,18 @@
     <link rel="preconnect" href="https://fonts.bunny.net">
     <link href="https://fonts.bunny.net/css?family=inter:400,500,600&display=swap" rel="stylesheet" />
     @production
-        <script defer src="https://umami.larsfixt.nl/script.js" data-website-id="057c461e-d015-4a5b-bce9-4b64757ede84"></script>
+        <script>
+            try {
+                const analyticsToggle = new URLSearchParams(window.location.search).get('analytics');
+
+                if (analyticsToggle === 'off') {
+                    localStorage.setItem('umami.disabled', '1');
+                } else if (analyticsToggle === 'on') {
+                    localStorage.removeItem('umami.disabled');
+                }
+            } catch (e) {}
+        </script>
+        <script defer src="https://dash.larsfixt.nl/lf.js" data-website-id="057c461e-d015-4a5b-bce9-4b64757ede84"></script>
     @endproduction
     @fluxAppearance()
 </head>

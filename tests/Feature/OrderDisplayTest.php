@@ -240,3 +240,13 @@ it('hides push indicator when ready orders have no push subscriptions', function
         ->test('pages::kitchen')
         ->assertDontSee(__('Push linked'));
 });
+
+it('renders the display qr code as a themeable svg without a background', function () {
+    $this->blade('<x-qr-code class="text-blue-800" />')
+        ->assertSee('<path fill-rule="evenodd"', false)
+        ->assertSee('class="text-blue-800"', false)
+        ->assertSee('fill="currentColor"', false)
+        ->assertDontSee('#000000', false)
+        ->assertDontSee('#ffffff', false)
+        ->assertDontSee('<?xml', false);
+});
