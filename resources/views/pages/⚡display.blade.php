@@ -1,11 +1,22 @@
 <?php
 
+use App\Events\OrdersUpdated;
 use App\Models\Order;
 use Livewire\Attributes\Computed;
 use Livewire\Attributes\Layout;
 use Livewire\Component;
 
 new #[Layout('layouts.guest')] class extends Component {
+    /**
+     * Most orders the "being prepared" board shows; the rest are summarised as "+N more".
+     */
+    private const PREPARING_BOARD_LIMIT = 24;
+
+    /**
+     * How long a newly received order is highlighted on the board.
+     */
+    private const NEW_ORDER_HIGHLIGHT_SECONDS = 45;
+
     public string $kitchenStatus = '';
 
     public int $concurrentSponsors = 1;
@@ -28,8 +39,10 @@ new #[Layout('layouts.guest')] class extends Component {
     public function getListeners()
     {
         return [
-            'echo:orders,OrderReady' => 'refreshOrders',
+            'echo:orders,OrderReady' => 'orderBecameReady',
             'echo:orders,OrderCompleted' => 'refreshOrders',
+            'echo:orders,OrderReceived' => 'refreshOrders',
+            'echo:orders,OrdersUpdated' => 'ordersUpdated',
             'echo:orders,KitchenStatusUpdated' => 'updateStatus',
         ];
     }
@@ -44,10 +57,65 @@ new #[Layout('layouts.guest')] class extends Component {
         $this->recentOrdersCount = Order::ready()->latest()->take(9)->count();
     }
 
+    /**
+     * Echo events from Livewire don't bubble to the window, so the bell is rung with a browser event of our own.
+     */
+    public function orderBecameReady(): void
+    {
+        $this->refreshOrders();
+        $this->dispatch('ring-bell');
+    }
+
+    /**
+     * Several orders changed at once in the kitchen: refresh once and ring the bell once.
+     *
+     * @param  array{change?: string}  $event
+     */
+    public function ordersUpdated(array $event): void
+    {
+        $this->refreshOrders();
+
+        if (($event['change'] ?? null) === OrdersUpdated::BECAME_READY) {
+            $this->dispatch('ring-bell');
+        }
+    }
+
     #[Computed]
     public function recentOrders()
     {
         return Order::ready()->latest()->take(9)->get();
+    }
+
+    /**
+     * Oldest first: the order at the top is the next one the kitchen will call.
+     */
+    #[Computed]
+    public function ordersInPreparation()
+    {
+        return Order::inPreparation()->oldest('updated_at')->oldest('id')->take(self::PREPARING_BOARD_LIMIT)->get();
+    }
+
+    #[Computed]
+    public function preparingCount(): int
+    {
+        return Order::inPreparation()->count();
+    }
+
+    /**
+     * With no orders at all the sponsors get the space of the ready grid.
+     */
+    #[Computed]
+    public function hasNoOrders(): bool
+    {
+        return $this->recentOrders->isEmpty() && $this->preparingCount === 0;
+    }
+
+    /**
+     * Seconds left to highlight this order as just received.
+     */
+    public function highlightSecondsLeft(Order $order): int
+    {
+        return max(0, self::NEW_ORDER_HIGHLIGHT_SECONDS - (int) $order->updated_at->diffInSeconds(now()));
     }
 
     #[Computed]
@@ -75,12 +143,11 @@ new #[Layout('layouts.guest')] class extends Component {
         adsEndpoint: @js(url('/api/ads?screen=kitchen')),
         concurrentSponsors: @js($this->concurrentSponsors),
     })" x-init="init()" @resize.window.debounce.150ms="handleResize()"
-        @beforeunload.window="destroyTimers()" x-on:echo:orders,OrderReady.window="playSound()">
+        @beforeunload.window="destroyTimers()" x-on:ring-bell.window="playSound()">
 
         <div class="text-center mb-8">
             <flux:text class="text-5xl lg:text-7xl font-black tracking-tight uppercase text-center">
                 {{ __('Orders') }}</flux:text>
-            <flux:text class="text-2xl mt-4 uppercase">{{ __('Ready for pick-up') }}</flux:text>
         </div>
 
         @if ($kitchenStatus)
@@ -90,6 +157,45 @@ new #[Layout('layouts.guest')] class extends Component {
                 </flux:callout.heading>
             </flux:callout>
         @endif
+
+        {{-- Fixed layout: "being prepared" beside "ready for pick-up" on the TV (below it on phones).
+             Only the numbers and sponsors inside the two areas change. --}}
+        <div class="flex flex-col gap-8 lg:flex-row">
+            <aside class="order-last lg:order-first lg:w-80 xl:w-96 2xl:w-md lg:shrink-0 lg:self-start lg:sticky lg:top-8"
+                data-test="preparing-board">
+                <div class="flex items-baseline justify-between gap-4 mb-1">
+                    <flux:heading size="xl" class="text-2xl! xl:text-3xl! uppercase">{{ __('Being prepared') }}</flux:heading>
+                    <flux:badge size="lg" class="text-2xl! font-bold tabular-nums px-3!" data-test="preparing-count">{{ $this->preparingCount }}</flux:badge>
+                </div>
+                <flux:text class="mb-4 text-lg">{{ __('We call your number as soon as it is ready.') }}</flux:text>
+
+                @if ($this->ordersInPreparation->isNotEmpty())
+                    <div class="grid grid-cols-4 gap-2 sm:gap-3 lg:grid-cols-3">
+                        @foreach ($this->ordersInPreparation as $order)
+                            @php($highlightFor = $this->highlightSecondsLeft($order))
+                            <flux:card wire:key="preparing-{{ $order->id }}" variant="outline" size="sm"
+                                x-data="{ isNew: {{ $highlightFor > 0 ? 'true' : 'false' }} }"
+                                x-init="if (isNew) setTimeout(() => isNew = false, {{ $highlightFor * 1000 }})"
+                                class="px-0! py-2! sm:py-2.5! text-center transition-colors duration-1000"
+                                x-bind:class="isNew && 'bg-amber-400! border-amber-400!'">
+                                <flux:text class="text-2xl sm:text-4xl lg:text-3xl xl:text-4xl 2xl:text-5xl font-bold tabular-nums tracking-tight"
+                                    x-bind:class="isNew && 'text-amber-950!'">
+                                    {{ $order->number }}
+                                </flux:text>
+                            </flux:card>
+                        @endforeach
+
+                        @if ($this->preparingCount > $this->ordersInPreparation->count())
+                            <flux:text class="col-span-full py-2 text-center text-xl! font-semibold">
+                                {{ __('+ :count more', ['count' => $this->preparingCount - $this->ordersInPreparation->count()]) }}
+                            </flux:text>
+                        @endif
+                    </div>
+                @endif
+            </aside>
+
+        <div class="min-w-0 flex-1">
+        <flux:heading size="xl" class="text-2xl! xl:text-3xl! uppercase mb-5">{{ __('Ready for pick-up') }}</flux:heading>
 
         <!-- Mobile upsell to the track page for specific tracking -->
         <div class="mb-4 md:hidden" x-data="{ visible: true }" x-show="visible" x-collapse>
@@ -108,12 +214,14 @@ new #[Layout('layouts.guest')] class extends Component {
                 </flux:callout>
             </div>
         </div>
-        @if ($this->recentOrders->isNotEmpty())
-            <div class="mb-8 grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-5">
+        @unless ($this->hasNoOrders)
+            {{-- Keep the column steps in sync with resolveColumns() in partials/display-ad-grid-block --}}
+            <div class="mb-8 grid grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">
+
                 @foreach ($this->recentOrders as $order)
                     <div wire:key="order-{{ $order->id }}" style="order: {{ $loop->iteration }}">
                         <flux:card class="text-center flex h-55 flex-col items-center justify-center">
-                            <flux:text class="text-4xl md:text-7xl xl:text-9xl font-black tracking-tighter">
+                            <flux:text class="text-4xl md:text-6xl xl:text-7xl 2xl:text-8xl font-black tracking-tighter">
                                 {{ $order->number }}
                             </flux:text>
                         </flux:card>
@@ -139,13 +247,15 @@ new #[Layout('layouts.guest')] class extends Component {
                 </template>
             </div>
         @else
-            <!-- Empty state -->
-            <!-- Bigger sponsor overview when no orders are ready -->
-            <div class="mt-10" x-show="visibleAds.length > 0" x-transition>
-                <div class="flex flex-wrap justify-center gap-5">
+            <!-- No orders at all: the sponsors get the space of the ready grid -->
+            <div x-show="visibleAds.length > 0" x-transition>
+                {{-- Up to three per row at a moderate size, centred in the ready area --}}
+                <div class="grid justify-center gap-5 grid-cols-1"
+                    x-bind:style="columns >= 4 && 'grid-template-columns: repeat(' + Math.min(visibleAds.length, 3) + ', minmax(0, 24rem))'">
                     <template x-for="(sponsorAd, adIndex) in visibleAds" :key="`sponsor-${activeAdIndex}-${adIndex}`">
 
-                        <flux:card class="flex flex-col gap-4 p-5 w-full lg:w-1/2" style="height: 328px; width: 50%;"
+                        <flux:card class="flex flex-col gap-4 p-5"
+                            x-bind:style="'height: ' + (visibleAds.length > 3 ? '13rem' : '18rem')"
                             x-bind:class="sponsorAd.call_to_action ? 'cursor-pointer' : ''"
                             x-on:click="if (sponsorAd.call_to_action) { window.open(sponsorAd.call_to_action, '_blank', 'noopener,noreferrer'); }"
                             x-on:keydown.enter.prevent="if (sponsorAd.call_to_action) { window.open(sponsorAd.call_to_action, '_blank', 'noopener,noreferrer'); }"
@@ -164,7 +274,7 @@ new #[Layout('layouts.guest')] class extends Component {
                     </template>
                 </div>
             </div>
-        @endif
+        @endunless
 
         <!-- OTHER READY ORDERS -->
         @if ($this->otherOrders()->count() > 0)
@@ -181,6 +291,9 @@ new #[Layout('layouts.guest')] class extends Component {
                 </div>
             </div>
         @endif
+
+        </div>
+        </div>
 
         <!-- Desktop Fixed QR Code Upsell -->
         <div class="fixed bottom-16 right-6 z-50 hidden lg:block transition-opacity duration-500 ease-in-out">

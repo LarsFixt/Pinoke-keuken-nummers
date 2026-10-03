@@ -4,6 +4,7 @@ namespace App\Models;
 
 use App\OrderStatus;
 use Database\Factories\OrderFactory;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -23,6 +24,60 @@ class Order extends Model
     protected $casts = [
         'status' => OrderStatus::class,
     ];
+
+    /**
+     * Keep the lookup key in sync with the displayed number.
+     */
+    protected static function booted(): void
+    {
+        static::saving(function (Order $order): void {
+            $order->number_key = self::numberKey((string) $order->number);
+        });
+    }
+
+    /**
+     * The number used for matching: digits without leading zeros, so "0317" and "317" are the same order.
+     */
+    public static function numberKey(string $number): string
+    {
+        return ltrim(trim($number), '0');
+    }
+
+    /**
+     * Scope a query to the order with this number, with or without leading zeros.
+     *
+     * @param  Builder<Order>  $query
+     */
+    public function scopeMatchingNumber(Builder $query, string $number): void
+    {
+        $query->where('number_key', self::numberKey($number));
+    }
+
+    /**
+     * Scope a query to orders the kitchen received a ticket for but has not called yet.
+     *
+     * @param  Builder<Order>  $query
+     */
+    public function scopeInPreparation(Builder $query): void
+    {
+        $query->where('status', OrderStatus::Pending)->whereHas('kitchenTickets');
+    }
+
+    /**
+     * Get the kitchen tickets printed for this order.
+     */
+    public function kitchenTickets(): HasMany
+    {
+        return $this->hasMany(KitchenTicket::class);
+    }
+
+    /**
+     * Whether any ticket for this order should be double-checked by the kitchen.
+     */
+    public function hasUncertainTicket(): bool
+    {
+        return $this->kitchenTickets->contains(fn (KitchenTicket $ticket): bool => $ticket->isUncertain());
+    }
 
     /**
      * Scope a query to only include ready orders.

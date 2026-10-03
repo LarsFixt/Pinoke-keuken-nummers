@@ -1,5 +1,6 @@
 <?php
 
+use App\Models\KitchenTicket;
 use App\Models\Order;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 
@@ -100,4 +101,37 @@ it('ignores numbers longer than 4 digits', function () {
     Livewire\Livewire::test('pages::track')
         ->call('startWatching', '12345')
         ->assertSet('currentNumber', '');
+});
+
+it('finds a ticketed order without typing the leading zero and shows the printed number', function () {
+    $order = Order::factory()->create(['number' => '0317', 'status' => 'pending']);
+    KitchenTicket::factory()->for($order)->create(['ticket_number' => '0317']);
+
+    Livewire\Livewire::test('pages::track')
+        ->call('startWatching', '317')
+        ->assertSet('currentNumber', '0317')
+        ->assertSet('orderReceived', true)
+        ->assertSee(__('Your order is being prepared'));
+
+    expect(Order::count())->toBe(1);
+});
+
+it('sets order ready when the event number differs only by leading zeros', function () {
+    Livewire\Livewire::test('pages::track')
+        ->call('startWatching', '317')
+        ->call('checkOrderReady', ['order' => ['number' => '0317']])
+        ->assertSet('orderReady', true);
+});
+
+it('shows the order as received once its kitchen ticket arrives', function () {
+    $component = Livewire\Livewire::test('pages::track')
+        ->call('startWatching', '317')
+        ->assertSet('orderReceived', false);
+
+    $order = Order::sole();
+    $order->update(['number' => '0317']);
+    KitchenTicket::factory()->for($order)->create();
+
+    $component->call('checkOrderReceived', ['order' => ['number' => '0317']])
+        ->assertSet('orderReceived', true);
 });

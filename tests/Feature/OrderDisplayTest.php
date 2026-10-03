@@ -2,9 +2,12 @@
 
 use App\Events\OrderCompleted;
 use App\Events\OrderReady;
+use App\Events\OrdersUpdated;
+use App\Models\KitchenTicket;
 use App\Models\Order;
 use App\Models\User;
 use App\OrderStatus;
+use App\Services\PiStatus;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Event;
 use Livewire\Livewire;
@@ -249,4 +252,147 @@ it('renders the display qr code as a themeable svg without a background', functi
         ->assertDontSee('#000000', false)
         ->assertDontSee('#ffffff', false)
         ->assertDontSee('<?xml', false);
+});
+
+it('calls a ticketed order from the kitchen when it is ready', function () {
+    Event::fake([OrderReady::class]);
+    $order = Order::factory()->create(['number' => '0317', 'status' => OrderStatus::Pending]);
+    KitchenTicket::factory()->for($order)->create();
+
+    Livewire::actingAs(User::factory()->create(['is_admin' => true]))
+        ->test('pages::kitchen')
+        ->assertSee('Br. Kroket')
+        ->call('markReady', $order->id);
+
+    expect($order->fresh()->status)->toBe(OrderStatus::Ready);
+    Event::assertDispatched(OrderReady::class);
+});
+
+it('calls the ticketed order when the kitchen types the number without leading zero', function () {
+    Event::fake([OrderReady::class]);
+    $order = Order::factory()->create(['number' => '0317', 'status' => OrderStatus::Pending]);
+
+    Livewire::actingAs(User::factory()->create(['is_admin' => true]))
+        ->test('pages::kitchen')
+        ->call('callOrder', '317');
+
+    expect(Order::count())->toBe(1)
+        ->and($order->fresh()->status)->toBe(OrderStatus::Ready)
+        ->and($order->fresh()->number)->toBe('0317');
+});
+
+it('does not call an order number made of only zeros', function () {
+    Livewire::actingAs(User::factory()->create(['is_admin' => true]))
+        ->test('pages::kitchen')
+        ->call('callOrder', '00');
+
+    expect(Order::count())->toBe(0);
+});
+
+it('lets the kitchen dismiss a ticket whose number could not be read', function () {
+    $ticket = KitchenTicket::factory()->withoutNumber()->create();
+
+    Livewire::actingAs(User::factory()->create(['is_admin' => true]))
+        ->test('pages::kitchen')
+        ->assertSee(__('Needs a look'))
+        ->call('dismissTicket', $ticket->id)
+        ->assertDontSee(__('Needs a look'));
+});
+
+it('warns the kitchen when the ticket reader has gone quiet', function () {
+    cache()->forever(PiStatus::BRIDGE_LAST_SEEN_KEY, now()->subMinutes(5)->getTimestamp());
+
+    Livewire::actingAs(User::factory()->create(['is_admin' => true]))
+        ->test('pages::kitchen')
+        ->assertSee(__('Ticket reader offline'));
+});
+
+it('shows ticketed orders as being prepared on the public display', function () {
+    $order = Order::factory()->create(['number' => '0317', 'status' => OrderStatus::Pending]);
+    KitchenTicket::factory()->for($order)->create();
+    Order::factory()->create(['number' => '0555', 'status' => OrderStatus::Pending]);
+
+    $this->get(route('home'))
+        ->assertOk()
+        ->assertSee(__('Being prepared'))
+        ->assertSee('0317')
+        ->assertDontSee('0555');
+});
+
+it('forbids a non-admin from calling kitchen actions with a snapshot of the kitchen page', function () {
+    $order = Order::factory()->create(['number' => '0317', 'status' => OrderStatus::Pending]);
+    KitchenTicket::factory()->for($order)->create();
+
+    $html = $this->actingAs(User::factory()->create(['is_admin' => true]))
+        ->get(route('dashboard'))
+        ->assertOk()
+        ->getContent();
+    preg_match('/wire:snapshot="([^"]+)"[^>]*wire:name="pages::kitchen"/', $html, $match);
+    $snapshot = html_entity_decode($match[1]);
+
+    $this->actingAs(User::factory()->create(['is_admin' => false]))
+        ->withHeader('X-Livewire', 'true')
+        ->postJson(app('livewire')->getUpdateUri(), ['components' => [[
+            'snapshot' => $snapshot,
+            'updates' => [],
+            'calls' => [['method' => 'markReady', 'params' => [$order->id], 'metadata' => []]],
+        ]]])
+        ->assertForbidden();
+
+    expect($order->fresh()->status)->toBe(OrderStatus::Pending);
+});
+
+it('calls every order in preparation at once and announces it with one broadcast', function () {
+    Event::fake([OrderReady::class, OrdersUpdated::class]);
+    $orders = Order::factory()->count(3)->has(KitchenTicket::factory(), 'kitchenTickets')
+        ->create(['status' => OrderStatus::Pending]);
+
+    Livewire::actingAs(User::factory()->create(['is_admin' => true]))
+        ->test('pages::kitchen')
+        ->call('markAllReady');
+
+    expect(Order::whereIn('id', $orders->modelKeys())->pluck('status')->unique()->all())->toBe([OrderStatus::Ready]);
+    Event::assertDispatchedTimes(OrdersUpdated::class, 1);
+    Event::assertNotDispatched(OrderReady::class);
+});
+
+it('deletes every order in preparation with its tickets without touching ready orders', function () {
+    Event::fake([OrdersUpdated::class]);
+    Order::factory()->count(2)->has(KitchenTicket::factory(), 'kitchenTickets')->create(['status' => OrderStatus::Pending]);
+    $ready = Order::factory()->create(['status' => OrderStatus::Ready]);
+
+    Livewire::actingAs(User::factory()->create(['is_admin' => true]))
+        ->test('pages::kitchen')
+        ->call('deleteAllInPreparation')
+        ->assertDontSee(__('Needs a look'));
+
+    expect(Order::pluck('id')->all())->toBe([$ready->id])
+        ->and(KitchenTicket::count())->toBe(0);
+    Event::assertDispatched(OrdersUpdated::class, fn (OrdersUpdated $event): bool => $event->change === OrdersUpdated::REMOVED);
+});
+
+it('marks every ready order as picked up and keeps them available to re-add', function () {
+    Event::fake([OrdersUpdated::class]);
+    $ready = Order::factory()->count(2)->create(['status' => OrderStatus::Ready]);
+    $preparing = Order::factory()->has(KitchenTicket::factory(), 'kitchenTickets')->create(['status' => OrderStatus::Pending]);
+
+    Livewire::actingAs(User::factory()->create(['is_admin' => true]))
+        ->test('pages::kitchen')
+        ->call('completeAllReady')
+        ->assertSee(__('Recently completed'));
+
+    expect(Order::whereIn('id', $ready->modelKeys())->pluck('status')->unique()->all())->toBe([OrderStatus::Completed])
+        ->and($preparing->fresh()->status)->toBe(OrderStatus::Pending);
+    Event::assertDispatchedTimes(OrdersUpdated::class, 1);
+});
+
+it('dismisses all tickets whose number could not be read', function () {
+    KitchenTicket::factory()->count(2)->withoutNumber()->create();
+
+    Livewire::actingAs(User::factory()->create(['is_admin' => true]))
+        ->test('pages::kitchen')
+        ->call('dismissAllTickets')
+        ->assertDontSee(__('Needs a look'));
+
+    expect(KitchenTicket::needsAttention()->count())->toBe(0);
 });

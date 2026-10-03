@@ -4,6 +4,8 @@ namespace App\Http\Controllers\Api;
 
 use App\Events\TvStatusUpdated;
 use App\Http\Controllers\Controller;
+use App\Services\PiStatus;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
 
@@ -14,15 +16,29 @@ class KioskTvController extends Controller
      */
     public function getStatus(Request $request)
     {
-        $expectedToken = config('services.kiosk.token');
-
-        if (! $expectedToken || $request->bearerToken() !== $expectedToken) {
-            return response()->json(['error' => 'Unauthorized'], 401);
-        }
-
         return response()->json([
             'status' => Cache::get('kiosk_tv_status', 'on'),
         ]);
+    }
+
+    /**
+     * Status report from the kiosk Pi, every minute and after every TV command.
+     */
+    public function heartbeat(Request $request, PiStatus $piStatus): JsonResponse
+    {
+        $status = $request->validate([
+            'hostname' => ['nullable', 'string', 'max:100'],
+            'ip' => ['nullable', 'ip'],
+            'uptime_seconds' => ['nullable', 'integer', 'min:0'],
+            'version' => ['nullable', 'string', 'max:20'],
+            'tv_power' => ['nullable', 'string', 'in:on,standby,in transition from standby to on,in transition from on to standby,unknown'],
+            'cec_error' => ['nullable', 'string', 'max:300'],
+            'browser_running' => ['nullable', 'boolean'],
+        ]);
+
+        $piStatus->recordKiosk($status);
+
+        return response()->json(['status' => 'ok']);
     }
 
     /**

@@ -1,0 +1,7 @@
+# Secrets and local state must never be committed
+*.env
+secret
+state/
+__pycache__/
+*.pcap
+!ticket-bridge/tests/fixtures/*.pcap

@@ -2,10 +2,15 @@
 
 use App\Events\OrderCompleted;
 use App\Events\OrderReady;
+use App\Events\OrdersUpdated;
+use App\Models\KitchenTicket;
 use App\Models\Order;
+use App\Models\PushSubscription;
 use App\Notifications\OrderReadyNotification;
 use App\OrderStatus;
+use App\Services\PiStatus;
 use Flux\Flux;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
 use Livewire\Attributes\Computed;
 use Livewire\Component;
@@ -17,6 +22,8 @@ new class extends Component
         return [
             'echo:orders,OrderReady' => '$refresh',
             'echo:orders,OrderCompleted' => '$refresh',
+            'echo:orders,OrderReceived' => '$refresh',
+            'echo:orders,OrdersUpdated' => '$refresh',
         ];
     }
 
@@ -26,22 +33,32 @@ new class extends Component
 
         $validator = Validator::make(['number' => $number], ['number' => ['required', 'string', 'max:4', 'regex:/^[0-9]+$/', 'not_in:0']]);
 
-        if ($validator->fails()) {
+        if ($validator->fails() || Order::numberKey($number) === '') {
             return;
         }
 
+        $order = Order::matchingNumber($number)->first();
+
         // Prevent duplicate orders with the same number
-        $exists = Order::ready()->where('number', $number)->exists();
-        if ($exists) {
+        if ($order?->status === OrderStatus::Ready) {
             Flux::toast(__('An order with this number is already ready.'), variant: 'danger');
 
             return;
         }
 
-        $order = Order::updateOrCreate(['number' => $number], ['status' => OrderStatus::Ready]);
+        $this->announceReady($order ?? new Order(['number' => $number]));
+    }
 
-        broadcast(new OrderReady($order))->toOthers();
-        $order->notify(new OrderReadyNotification($order));
+    /**
+     * Call an order that came in through a kitchen ticket.
+     */
+    public function markReady(int $id): void
+    {
+        $order = Order::find($id);
+
+        if ($order && $order->status === OrderStatus::Pending) {
+            $this->announceReady($order);
+        }
     }
 
     public function completeOrder(int $id): void
@@ -65,6 +82,76 @@ new class extends Component
         }
     }
 
+    /**
+     * Hide a ticket without a readable number once the kitchen has handled it.
+     */
+    public function dismissTicket(int $id): void
+    {
+        KitchenTicket::needsAttention()->whereKey($id)->update(['dismissed_at' => now()]);
+    }
+
+    /**
+     * Call every order that is in preparation at once.
+     */
+    public function markAllReady(): void
+    {
+        $orders = Order::inPreparation()->get();
+
+        foreach ($orders as $order) {
+            $order->update(['status' => OrderStatus::Ready]);
+            $order->notify(new OrderReadyNotification($order));
+        }
+
+        if ($orders->isNotEmpty()) {
+            broadcast(new OrdersUpdated(OrdersUpdated::BECAME_READY))->toOthers();
+        }
+
+        Flux::modal('confirm-mark-all-ready')->close();
+    }
+
+    /**
+     * Throw away every order in preparation, with its tickets, e.g. after a test or a cancelled rush.
+     */
+    public function deleteAllInPreparation(): void
+    {
+        $orderIds = Order::inPreparation()->pluck('id');
+
+        DB::transaction(function () use ($orderIds): void {
+            KitchenTicket::whereIn('order_id', $orderIds)->delete();
+            Order::whereIn('id', $orderIds)->delete();
+        });
+
+        if ($orderIds->isNotEmpty()) {
+            broadcast(new OrdersUpdated(OrdersUpdated::REMOVED))->toOthers();
+        }
+
+        Flux::modal('confirm-delete-all-preparing')->close();
+    }
+
+    /**
+     * Mark every ready order as picked up. They stay under "Recently completed" so a mistake can be undone.
+     */
+    public function completeAllReady(): void
+    {
+        $orderIds = Order::ready()->pluck('id');
+
+        DB::transaction(function () use ($orderIds): void {
+            Order::whereIn('id', $orderIds)->update(['status' => OrderStatus::Completed]);
+            PushSubscription::whereIn('order_id', $orderIds)->delete();
+        });
+
+        if ($orderIds->isNotEmpty()) {
+            broadcast(new OrdersUpdated(OrdersUpdated::REMOVED))->toOthers();
+        }
+
+        Flux::modal('confirm-complete-all-ready')->close();
+    }
+
+    public function dismissAllTickets(): void
+    {
+        KitchenTicket::needsAttention()->update(['dismissed_at' => now()]);
+    }
+
     #[Computed]
     public function recentlyCompletedOrders()
     {
@@ -75,6 +162,36 @@ new class extends Component
     public function readyOrders()
     {
         return Order::ready()->withCount('pushSubscriptions')->latest()->get();
+    }
+
+    #[Computed]
+    public function ordersInPreparation()
+    {
+        return Order::inPreparation()->with('kitchenTickets')->oldest('updated_at')->oldest('id')->get();
+    }
+
+    #[Computed]
+    public function ticketsNeedingAttention()
+    {
+        return KitchenTicket::needsAttention()->latest()->latest('id')->limit(10)->get();
+    }
+
+    /**
+     * True when the ticket reader has been seen before but has gone quiet.
+     */
+    #[Computed]
+    public function bridgeOffline(): bool
+    {
+        return app(PiStatus::class)->bridgeWentQuiet();
+    }
+
+    private function announceReady(Order $order): void
+    {
+        $order->status = OrderStatus::Ready;
+        $order->save();
+
+        broadcast(new OrderReady($order))->toOthers();
+        $order->notify(new OrderReadyNotification($order));
     }
 };
 ?>
@@ -125,10 +242,107 @@ new class extends Component
         </div>
 
         <!-- Active Orders Section -->
-        <div class="flex-1">
+        <div class="flex-1" wire:poll.60s>
+            @if ($this->bridgeOffline)
+                <flux:callout variant="warning" icon="signal-slash" class="mb-4"
+                    heading="{{ __('Ticket reader offline') }}"
+                    text="{{ __('New tickets are not coming in automatically. Use the numpad until it is back.') }}" />
+            @endif
+
+            @if ($this->ticketsNeedingAttention->isNotEmpty())
+                <flux:card class="mb-4">
+                    <div class="mb-4 flex flex-wrap items-start justify-between gap-3">
+                        <div>
+                            <flux:heading size="xl">{{ __('Needs a look') }}</flux:heading>
+                            <flux:subheading>
+                                {{ __('The number on these tickets could not be read. Call them with the numpad.') }}
+                            </flux:subheading>
+                        </div>
+                        <flux:button size="sm" icon="eye-slash" wire:click="dismissAllTickets">
+                            {{ __('Dismiss all') }}
+                        </flux:button>
+                    </div>
+
+                    <div class="flex flex-col gap-3">
+                        @foreach ($this->ticketsNeedingAttention as $ticket)
+                            <flux:callout wire:key="ticket-attention-{{ $ticket->id }}" variant="warning"
+                                icon="exclamation-triangle">
+                                <flux:callout.text class="whitespace-pre-line">{{ $ticket->raw_text }}</flux:callout.text>
+                                <x-slot name="actions">
+                                    <flux:button size="sm" wire:click="dismissTicket({{ $ticket->id }})">
+                                        {{ __('Dismiss') }}
+                                    </flux:button>
+                                </x-slot>
+                            </flux:callout>
+                        @endforeach
+                    </div>
+                </flux:card>
+            @endif
+
+            @if ($this->ordersInPreparation->isNotEmpty())
+                <flux:card class="mb-4">
+                    <div class="mb-4 flex flex-wrap items-start justify-between gap-3">
+                        <div>
+                            <flux:heading size="xl">{{ __('In preparation') }}</flux:heading>
+                            <flux:subheading>{{ __('Tap an order when it is ready to call the customer.') }}</flux:subheading>
+                        </div>
+                        <div class="flex gap-2">
+                            <flux:modal.trigger name="confirm-mark-all-ready">
+                                <flux:button size="sm" variant="primary" color="green" icon="megaphone">
+                                    {{ __('All ready') }}
+                                </flux:button>
+                            </flux:modal.trigger>
+                            <flux:modal.trigger name="confirm-delete-all-preparing">
+                                <flux:button size="sm" variant="danger" icon="trash">{{ __('Delete all') }}</flux:button>
+                            </flux:modal.trigger>
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-2 sm:grid-cols-3 gap-4">
+                        @foreach ($this->ordersInPreparation as $order)
+                            <flux:card wire:key="preparing-order-{{ $order->id }}" size="sm"
+                                wire:click="markReady({{ $order->id }})" role="button" tabindex="0"
+                                x-on:keydown.enter="$wire.markReady({{ $order->id }})"
+                                @class([
+                                    'flex flex-col gap-1 cursor-pointer hover:bg-zinc-50 dark:hover:bg-white/15',
+                                    'ring-2 ring-amber-500' => $order->hasUncertainTicket(),
+                                ])>
+                                <flux:heading size="xl" class="text-3xl! font-black">{{ $order->number }}</flux:heading>
+                                @if ($order->hasUncertainTicket())
+                                    <div>
+                                        <flux:tooltip :content="__('Check the number on the ticket')">
+                                            <flux:badge color="amber" size="sm" icon="exclamation-triangle">
+                                                {{ __('Check number') }}
+                                            </flux:badge>
+                                        </flux:tooltip>
+                                    </div>
+                                @endif
+                                @foreach ($order->kitchenTickets as $ticket)
+                                    @foreach ($ticket->items as $item)
+                                        <flux:text variant="strong">{{ $item['qty'] }}× {{ $item['name'] }}</flux:text>
+                                        @foreach ($item['notes'] as $note)
+                                            <flux:text size="sm" class="pl-3">{{ $note }}</flux:text>
+                                        @endforeach
+                                    @endforeach
+                                @endforeach
+                            </flux:card>
+                        @endforeach
+                    </div>
+                </flux:card>
+            @endif
+
             <flux:card>
-                <flux:heading size="xl">{{ __('Ready orders') }}</flux:heading>
-                <flux:subheading class="mb-4">{{ __('Tap an order to mark it as picked up.') }}</flux:subheading>
+                <div class="mb-4 flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                        <flux:heading size="xl">{{ __('Ready orders') }}</flux:heading>
+                        <flux:subheading>{{ __('Tap an order to mark it as picked up.') }}</flux:subheading>
+                    </div>
+                    @if ($this->readyOrders->isNotEmpty())
+                        <flux:modal.trigger name="confirm-complete-all-ready">
+                            <flux:button size="sm" icon="check-circle">{{ __('Remove all') }}</flux:button>
+                        </flux:modal.trigger>
+                    @endif
+                </div>
 
                 <div class="grid grid-cols-2 sm:grid-cols-3 gap-4">
                     @forelse($this->readyOrders as $order)
@@ -194,4 +408,65 @@ new class extends Component
             @endif
         </div>
     </div>
+
+    {{-- Confirmations for the bulk actions: big buttons for a busy kitchen tablet --}}
+    <flux:modal name="confirm-mark-all-ready" class="md:w-md">
+        <div class="space-y-6">
+            <div>
+                <flux:heading size="lg">{{ __('Call all orders in preparation?') }}</flux:heading>
+                <flux:text class="mt-2">
+                    {{ trans_choice(':count order will be shown as ready and its customer notified.|:count orders will be shown as ready and their customers notified.', $this->ordersInPreparation->count()) }}
+                </flux:text>
+            </div>
+            <div class="flex gap-2">
+                <flux:spacer />
+                <flux:modal.close>
+                    <flux:button variant="ghost">{{ __('Cancel') }}</flux:button>
+                </flux:modal.close>
+                <flux:button variant="primary" color="green" icon="megaphone" wire:click="markAllReady">
+                    {{ __('All ready') }}
+                </flux:button>
+            </div>
+        </div>
+    </flux:modal>
+
+    <flux:modal name="confirm-delete-all-preparing" class="md:w-md">
+        <div class="space-y-6">
+            <div>
+                <flux:heading size="lg">{{ __('Delete all orders in preparation?') }}</flux:heading>
+                <flux:text class="mt-2">
+                    {{ __('They disappear from the kitchen and the display without notifying anyone. This cannot be undone.') }}
+                </flux:text>
+            </div>
+            <div class="flex gap-2">
+                <flux:spacer />
+                <flux:modal.close>
+                    <flux:button variant="ghost">{{ __('Cancel') }}</flux:button>
+                </flux:modal.close>
+                <flux:button variant="danger" icon="trash" wire:click="deleteAllInPreparation">
+                    {{ __('Delete all') }}
+                </flux:button>
+            </div>
+        </div>
+    </flux:modal>
+
+    <flux:modal name="confirm-complete-all-ready" class="md:w-md">
+        <div class="space-y-6">
+            <div>
+                <flux:heading size="lg">{{ __('Remove all ready orders?') }}</flux:heading>
+                <flux:text class="mt-2">
+                    {{ __('They are marked as picked up. You can still re-add them under "Recently completed".') }}
+                </flux:text>
+            </div>
+            <div class="flex gap-2">
+                <flux:spacer />
+                <flux:modal.close>
+                    <flux:button variant="ghost">{{ __('Cancel') }}</flux:button>
+                </flux:modal.close>
+                <flux:button variant="primary" icon="check-circle" wire:click="completeAllReady">
+                    {{ __('Remove all') }}
+                </flux:button>
+            </div>
+        </div>
+    </flux:modal>
 </div>
