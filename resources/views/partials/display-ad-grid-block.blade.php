@@ -41,9 +41,14 @@
                     new Audio('/sound/bell.mp3').play();
                 },
 
+                // Must match the ready grid on the display: grid-cols-2 md:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5
                 resolveColumns() {
-                    if (window.innerWidth >= 1024) {
+                    if (window.innerWidth >= 1536) {
                         return 5;
+                    }
+
+                    if (window.innerWidth >= 1280) {
+                        return 4;
                     }
 
                     if (window.innerWidth >= 768) {

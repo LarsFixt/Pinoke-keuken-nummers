@@ -39,4 +39,10 @@ return [
         'token' => env('KIOSK_API_TOKEN'),
     ],
 
+    'ticket_bridge' => [
+        'key_id' => env('TICKET_BRIDGE_KEY_ID'),
+        'secret' => env('TICKET_BRIDGE_SECRET'),
+        'max_clock_skew' => (int) env('TICKET_BRIDGE_MAX_CLOCK_SKEW', 300),
+    ],
+
 ];
