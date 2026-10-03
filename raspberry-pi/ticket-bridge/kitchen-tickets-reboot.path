@@ -1,0 +1,11 @@
+[Unit]
+Description=Reboot when the ticket reader asks for it (TV control page)
+
+[Path]
+# The reader runs as a dynamic user without any right to reboot; it only drops this file
+# in its state directory (DynamicUser keeps that under /var/lib/private).
+PathExists=/var/lib/private/kitchen-tickets/reboot-requested
+Unit=kitchen-tickets-reboot.service
+
+[Install]
+WantedBy=multi-user.target
