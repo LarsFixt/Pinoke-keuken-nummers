@@ -145,7 +145,7 @@ new class extends Component
                             },
                             init() {
                                 // If it loads already past 4 minutes, complete it immediately
-                                if (this.elapsed >= 240) {
+                                if (this.elapsed >= 360) {
                                     $wire.completeOrder({{ $order->id }});
                                     return;
                                 }
