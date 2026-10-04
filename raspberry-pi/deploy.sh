@@ -18,4 +18,5 @@ cd "$(dirname "$0")"
 
 rsync -av --delete --exclude tests/ --exclude __pycache__/ --exclude '*.env' --exclude secret \
     "$project/" "$host:~/$project-install/"
-ssh -t "$host" "cd ~/$project-install && sudo env $* ./install.sh"
+# SSH_CONNECTION lets the installer check it is not about to cut off this connection.
+ssh -t "$host" "cd ~/$project-install && sudo env SSH_CONNECTION=\"\$SSH_CONNECTION\" $* ./install.sh"

@@ -39,9 +39,9 @@ HEARTBEAT_INTERVAL = 60
 
 
 def setting(name, default=None):
-    value = os.environ.get(name, default)
-    if value is None:
-        sys.exit(f"missing setting {name}")
+    value = os.environ.get(name) or default
+    if not value:
+        sys.exit(f"missing setting {name} in /etc/kiosk-monitor/kiosk-monitor.env")
     return value
 
 

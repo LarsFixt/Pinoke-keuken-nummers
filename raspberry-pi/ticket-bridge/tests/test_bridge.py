@@ -1,9 +1,12 @@
 """Run with: python3 -m unittest   (from raspberry-pi/ticket-bridge)"""
 import argparse
+import os
 import shutil
+import subprocess
 import tempfile
 import sys
 import unittest
+from datetime import datetime
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
@@ -103,6 +106,25 @@ class HeartbeatTest(unittest.TestCase):
 
         self.assertTrue(self.spool.drain())
         self.assertEqual(list(self.spool.dir.glob("*.json")), [])
+
+
+@unittest.skipUnless(shutil.which("tesseract"), "tesseract-ocr is not installed")
+class ObserveModeTest(unittest.TestCase):
+    def test_observe_mode_archives_the_tickets_and_the_report_lists_them_in_order(self):
+        with tempfile.TemporaryDirectory() as state:
+            env = {**os.environ, "TICKETS_DRY_RUN": "1"}
+            script = str(Path(__file__).resolve().parent.parent / "ticket_reader.py")
+            replay = subprocess.run([sys.executable, script, "--pcap", str(FIXTURES / "tickets.pcap"),
+                                     "--printer-ip", "172.220.230.190", "--state-dir", state],
+                                    env=env, capture_output=True, text=True, timeout=120)
+            day = datetime.now().strftime("%Y-%m-%d")
+            report = subprocess.run([sys.executable, script, "--report", day, "--state-dir", state],
+                                    capture_output=True, text=True, timeout=30)
+
+        self.assertEqual(replay.returncode, 0, replay.stderr)
+        numbers = [line.split()[1] for line in report.stdout.splitlines()[1:4]]
+        self.assertEqual(numbers, ["0317", "0318", "0319"])
+        self.assertIn("3 tickets, 3 with a number, 0 with warnings", report.stdout)
 
 
 if __name__ == "__main__":

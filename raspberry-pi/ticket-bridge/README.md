@@ -16,6 +16,33 @@ The Pi never talks to the POS or to the printer, and it never transmits on the m
 | The secret leaks from the Pi | The secret is in `/etc/kitchen-tickets/secret` (root, 0600) and is handed to the service as a systemd credential, not as an environment variable. The service runs as a dynamic user with only `CAP_NET_RAW`. |
 | Ticket contents leak to the public | Only the order number and status are broadcast. Ticket images stay on the Pi, and the API refuses them. |
 
+## Trial run first (observe mode)
+
+A fresh install starts in **observe mode** (`TICKETS_DRY_RUN=1`). The reader reads every ticket and archives a PNG and JSON of it on the Pi, but sends nothing to the app. You can run it for a whole service while the app and the kitchen work exactly as before.
+
+1. Connect the Pi to Wi-Fi and deploy **over Wi-Fi**. The installer refuses to run over the port that becomes the mirror port.
+2. Plug the Pi's Ethernet into the mirror port and check that it is listening:
+   - `ip -4 addr show eth0` shows no address;
+   - `journalctl -u kitchen-tickets -f` shows `listening on eth0 (promiscuous)` and `OBSERVE MODE`.
+3. Print a ticket, or wait for the first order. A line like `ticket 0317 (Keuken): 1x Br. Kroket` should appear within a few seconds. Compare it with the paper ticket.
+4. After the service, check what it read:
+
+   ```sh
+   sudo kitchen-tickets-report             # today
+   sudo kitchen-tickets-report 2026-10-04  # another day
+   ```
+
+   Compare the number of tickets with the POS. Look at the PNGs of tickets with warnings in `/var/lib/kitchen-tickets/archive/<day>/`.
+
+**Going live**, once the app with the ticket API is deployed (migrations run, `TICKET_BRIDGE_*` set):
+
+```sh
+sudo sed -i 's/^TICKETS_DRY_RUN=1/TICKETS_DRY_RUN=0/' /etc/kitchen-tickets/kitchen-tickets.env
+sudo systemctl restart kitchen-tickets
+```
+
+Tickets from that moment on go to the app. Tickets read during the trial are not sent afterwards.
+
 ## Install
 
 1. Plug the Pi's Ethernet port into the mirror port. Connect the uplink, Wi-Fi or a second NIC, to a network with internet access.

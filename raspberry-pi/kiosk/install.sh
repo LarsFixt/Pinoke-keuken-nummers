@@ -2,13 +2,17 @@
 # Installs the kiosk on Raspberry Pi OS (Bookworm or newer, Wayland desktop with auto-login).
 # Normally run by ../deploy.sh; by hand: sudo ./install.sh
 #
-#   KIOSK_USER=pin-viewer KIOSK_URL=https://keuken.pinoke.net sudo -E ./install.sh
+#   KIOSK_USER=pin-viewer KIOSK_URL=https://keuken.pinoke.net KIOSK_REVERB_APP_KEY=... sudo -E ./install.sh
 #
 # KIOSK_USER is the desktop user that is logged in automatically and shows the browser.
+# KIOSK_REVERB_APP_KEY is the public Reverb key (REVERB_APP_KEY, the one the browser also uses);
+# KIOSK_REVERB_HOST defaults to order.larsfixt.nl.
 set -eu
 
 KIOSK_USER=${KIOSK_USER:-${SUDO_USER:-}}
 KIOSK_URL=${KIOSK_URL:-https://keuken.pinoke.net}
+KIOSK_REVERB_HOST=${KIOSK_REVERB_HOST:-order.larsfixt.nl}
+KIOSK_REVERB_APP_KEY=${KIOSK_REVERB_APP_KEY:-}
 
 [ "$(id -u)" -eq 0 ] || { echo "run as root (sudo)" >&2; exit 1; }
 [ -n "$KIOSK_USER" ] && id "$KIOSK_USER" >/dev/null 2>&1 || { echo "set KIOSK_USER to the desktop user" >&2; exit 1; }
@@ -37,7 +41,15 @@ install -m 644 50-kiosk-monitor.rules /etc/polkit-1/rules.d/
 install -d -m 700 /etc/kiosk-monitor
 if [ ! -f /etc/kiosk-monitor/kiosk-monitor.env ]; then
     install -m 600 kiosk-monitor.env.example /etc/kiosk-monitor/kiosk-monitor.env
-    echo "Created /etc/kiosk-monitor/kiosk-monitor.env - fill in KIOSK_REVERB_APP_KEY"
+    sed -i -e "s|^KIOSK_REVERB_HOST=.*|KIOSK_REVERB_HOST=$KIOSK_REVERB_HOST|" \
+        -e "s|^KIOSK_REVERB_APP_KEY=.*|KIOSK_REVERB_APP_KEY=$KIOSK_REVERB_APP_KEY|" \
+        -e "s|^KIOSK_STATUS_URL=.*|KIOSK_STATUS_URL=${KIOSK_URL%/}/api/kiosk/tv-status|" \
+        /etc/kiosk-monitor/kiosk-monitor.env
+    echo "Created /etc/kiosk-monitor/kiosk-monitor.env"
+fi
+if ! grep -q '^KIOSK_REVERB_APP_KEY=.' /etc/kiosk-monitor/kiosk-monitor.env; then
+    echo "WARNING: KIOSK_REVERB_APP_KEY is empty in /etc/kiosk-monitor/kiosk-monitor.env:" >&2
+    echo "         TV on/off and reboot from the app will not work until it is filled in." >&2
 fi
 if [ ! -s /etc/kiosk-monitor/api-token ]; then
     printf "KIOSK_API_TOKEN (from Laravel's .env, input hidden): "

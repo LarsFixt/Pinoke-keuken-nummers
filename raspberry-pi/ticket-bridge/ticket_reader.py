@@ -10,6 +10,10 @@ check it came from this Pi, was not changed on the way and is not a replay.
 
 Live:    sudo ./ticket_reader.py --iface eth0 --printer-ip 172.220.230.190 --api-url https://... --secret-file secret
 Replay:  ./ticket_reader.py --pcap tests/fixtures/tickets.pcap --printer-ip 172.220.230.190 --dry-run
+Report:  ./ticket_reader.py --report [YYYY-MM-DD]   (what was read that day, from the archive)
+
+Observe mode (--dry-run or TICKETS_DRY_RUN=1) reads and archives every ticket but sends
+nothing, so the reader can be checked against the paper tickets before going live.
 
 Requires: python3, python3-pil, tesseract-ocr, tesseract-ocr-nld
 """
@@ -508,7 +512,8 @@ class Processor:
                 stem.with_suffix(".png").write_bytes(png_bytes(img))
             stem.with_suffix(".json").write_text(json.dumps(payload, indent=2, ensure_ascii=False))
         if self.args.dry_run:
-            print(json.dumps(payload, indent=2, ensure_ascii=False), flush=True)
+            if sys.stdout.isatty():  # under systemd the log line and the archive are enough
+                print(json.dumps(payload, indent=2, ensure_ascii=False), flush=True)
         else:
             self.spool.put(payload)
         Stats.tickets_seen += 1
@@ -693,6 +698,27 @@ class Spool(threading.Thread):
             self.wake.clear()
 
 
+def report(state_dir, day):
+    """Print what was read on one day, from the archive, to check it against the paper tickets."""
+    folder = Path(state_dir, "archive", day)
+    tickets = sorted((json.loads(p.read_text()) for p in folder.glob("*.json")), key=lambda t: t["captured_at"]) \
+        if folder.is_dir() else []
+    if not tickets:
+        print(f"No tickets archived for {day} in {folder}")
+        return
+    print(f"{'time':8}  {'number':6}  {'register':14}  {'conf':>5}  items / warnings")
+    for t in tickets:
+        captured = datetime.fromisoformat(t["captured_at"]).astimezone().strftime("%H:%M:%S")
+        register = f"{t.get('register') or '?'} {t.get('register_name') or ''}".strip()
+        items = ", ".join(f"{i['qty']}x {i['name']}" for i in t["items"]) or "-"
+        conf = t.get("ticket_number_confidence")
+        print(f"{captured:8}  {t['ticket_number'] or '????':6}  {register[:14]:14}  {conf if conf is not None else '-':>5}  "
+              f"{items}{'  !! ' + '; '.join(t['warnings']) if t['warnings'] else ''}")
+    numbered = [t for t in tickets if t["ticket_number"]]
+    print(f"\n{len(tickets)} tickets, {len(numbered)} with a number, "
+          f"{sum(1 for t in tickets if t['warnings'])} with warnings (check their PNG in {folder})")
+
+
 def read_secret(ap, args):
     """The shared secret: systemd credential first (never in the environment), then --secret-file."""
     creds = os.environ.get("CREDENTIALS_DIRECTORY")
@@ -720,7 +746,7 @@ def main():
     env = os.environ.get
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--iface", default=env("TICKETS_IFACE", "eth0"), help="mirror port interface")
-    ap.add_argument("--printer-ip", default=env("TICKETS_PRINTER_IP"), required=not env("TICKETS_PRINTER_IP"))
+    ap.add_argument("--printer-ip", default=env("TICKETS_PRINTER_IP"))
     ap.add_argument("--port", type=int, default=int(env("TICKETS_PORT", "9100")))
     ap.add_argument("--api-url", default=env("TICKETS_API_URL"),
                     help="e.g. https://keuken.pinoke.net/api/kitchen-tickets")
@@ -738,12 +764,24 @@ def main():
     ap.add_argument("--min-confidence", type=float, default=75.0)
     ap.add_argument("--codepage", default="cp858")
     ap.add_argument("--pcap", help="replay a tcpdump capture instead of listening live")
-    ap.add_argument("--dry-run", action="store_true", help="print JSON instead of sending")
+    ap.add_argument("--dry-run", action="store_true", default=env("TICKETS_DRY_RUN", "") == "1",
+                    help="observe only: read and archive tickets but send nothing (also TICKETS_DRY_RUN=1)")
+    ap.add_argument("--report", nargs="?", const=datetime.now().strftime("%Y-%m-%d"), metavar="YYYY-MM-DD",
+                    help="print the tickets archived on that day (default today) and exit")
     ap.add_argument("-v", "--verbose", action="store_true")
     args = ap.parse_args()
 
+    if args.report:
+        report(args.state_dir, args.report)
+        return
+    if not args.printer_ip:
+        ap.error("--printer-ip (or TICKETS_PRINTER_IP) is required")
+
     logging.basicConfig(level=logging.DEBUG if args.verbose else logging.INFO,
                         format="%(asctime)s %(levelname)s %(message)s")
+    if args.dry_run and not args.pcap:
+        log.warning("OBSERVE MODE: tickets are read and archived in %s, nothing is sent to the app",
+                    Path(args.state_dir, "archive"))
     api = None if args.dry_run else Api(args.api_url or ap.error("--api-url (or TICKETS_API_URL) is required unless --dry-run"),
                                         args.key_id, read_secret(ap, args))
     if api:
