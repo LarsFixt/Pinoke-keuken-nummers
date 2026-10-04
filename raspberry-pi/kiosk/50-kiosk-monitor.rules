@@ -1,0 +1,9 @@
+// Installed in /etc/polkit-1/rules.d/. Lets the kiosk-monitor service reboot the Pi, and nothing else.
+polkit.addRule(function (action, subject) {
+    if (subject.user === "kiosk-monitor" &&
+        (action.id === "org.freedesktop.login1.reboot" ||
+         action.id === "org.freedesktop.login1.reboot-multiple-sessions" ||
+         action.id === "org.freedesktop.login1.reboot-ignore-inhibit")) {
+        return polkit.Result.YES;
+    }
+});

@@ -1,0 +1,36 @@
+[Unit]
+Description=Kiosk monitor (TV on/off over CEC, remote reboot)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+EnvironmentFile=/etc/kiosk-monitor/kiosk-monitor.env
+LoadCredential=kiosk-api-token:/etc/kiosk-monitor/api-token
+ExecStart=/usr/bin/python3 /opt/kiosk-monitor/kiosk_monitor.py
+Restart=always
+RestartSec=5
+Environment=PYTHONUNBUFFERED=1
+
+User=kiosk-monitor
+# CEC devices (/dev/cec*, /dev/vchiq) belong to the video group
+SupplementaryGroups=video
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+ProtectHostname=yes
+LockPersonality=yes
+RestrictNamespaces=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX AF_NETLINK
+CapabilityBoundingSet=
+SystemCallArchitectures=native
+
+[Install]
+WantedBy=multi-user.target

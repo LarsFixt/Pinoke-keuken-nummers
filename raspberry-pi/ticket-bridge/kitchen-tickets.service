@@ -1,0 +1,47 @@
+[Unit]
+Description=Kitchen ticket bridge (mirror port -> OCR -> signed API calls)
+After=network-online.target time-sync.target
+Wants=network-online.target
+
+[Service]
+EnvironmentFile=/etc/kitchen-tickets/kitchen-tickets.env
+# Make sure the mirror interface is up and accepts frames not addressed to us.
+ExecStartPre=+/usr/sbin/ip link set ${TICKETS_IFACE} up promisc on
+ExecStart=/usr/bin/python3 /opt/kitchen-tickets/ticket_reader.py
+Restart=always
+RestartSec=5
+
+# The shared secret is handed over as a credential: it is not in the environment
+# (visible in /proc) and only this service can read it.
+LoadCredential=bridge-secret:/etc/kitchen-tickets/secret
+
+# Run unprivileged; raw packet capture only needs CAP_NET_RAW.
+DynamicUser=yes
+StateDirectory=kitchen-tickets
+UMask=0077
+AmbientCapabilities=CAP_NET_RAW
+CapabilityBoundingSet=CAP_NET_RAW
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+ProtectHostname=yes
+ProtectProc=invisible
+ProcSubset=pid
+LockPersonality=yes
+RestrictNamespaces=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+RestrictAddressFamilies=AF_PACKET AF_INET AF_INET6 AF_UNIX
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+SystemCallErrorNumber=EPERM
+
+[Install]
+WantedBy=multi-user.target

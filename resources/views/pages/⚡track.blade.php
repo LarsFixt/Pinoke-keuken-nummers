@@ -12,6 +12,11 @@ new #[Layout('layouts::guest')] class extends Component {
 
     public bool $orderReady = false;
 
+    /**
+     * True once the kitchen has received a ticket for this number.
+     */
+    public bool $orderReceived = false;
+
     public string $kitchenStatus = '';
 
     public function mount(): void
@@ -27,6 +32,8 @@ new #[Layout('layouts::guest')] class extends Component {
     {
         return [
             'echo:orders,OrderReady' => 'checkOrderReady',
+            'echo:orders,OrderReceived' => 'checkOrderReceived',
+            'echo:orders,OrdersUpdated' => 'refreshTrackingStatus',
             'echo:orders,KitchenStatusUpdated' => 'updateStatus',
         ];
     }
@@ -44,10 +51,15 @@ new #[Layout('layouts::guest')] class extends Component {
             return;
         }
 
-        $this->currentNumber = $number;
+        if (Order::numberKey($number) === '') {
+            return;
+        }
 
-        $order = Order::firstOrCreate(['number' => $this->currentNumber], ['status' => OrderStatus::Pending]);
-        $this->orderReady = $order->status->value === 'ready';
+        $order = Order::matchingNumber($number)->first()
+            ?? Order::create(['number' => $number, 'status' => OrderStatus::Pending]);
+
+        $this->currentNumber = $order->number;
+        $this->syncOrderState($order);
     }
 
     public function subscribeToPush(string $endpoint, string $publicKey, string $authToken, string $contentEncoding): void
@@ -56,7 +68,7 @@ new #[Layout('layouts::guest')] class extends Component {
             return;
         }
 
-        $order = Order::where('number', $this->currentNumber)->first();
+        $order = Order::matchingNumber($this->currentNumber)->first();
 
         if ($order) {
             $order->updatePushSubscription($endpoint, $publicKey, $authToken, $contentEncoding);
@@ -67,6 +79,7 @@ new #[Layout('layouts::guest')] class extends Component {
     {
         $this->currentNumber = '';
         $this->orderReady = false;
+        $this->orderReceived = false;
     }
 
     public function refreshTrackingStatus(): void
@@ -75,20 +88,44 @@ new #[Layout('layouts::guest')] class extends Component {
             return;
         }
 
-        $order = Order::where('number', $this->currentNumber)->first();
+        $order = Order::matchingNumber($this->currentNumber)->first();
 
         if (!$order) {
             return;
         }
 
-        $this->orderReady = $order->status->value === 'ready';
+        $this->currentNumber = $order->number;
+        $this->syncOrderState($order);
     }
 
     public function checkOrderReady(array $event): void
     {
-        if ($this->currentNumber && isset($event['order']['number']) && (string) $event['order']['number'] === (string) $this->currentNumber) {
+        if ($this->isTrackedOrder($event)) {
             $this->orderReady = true;
         }
+    }
+
+    public function checkOrderReceived(array $event): void
+    {
+        if ($this->isTrackedOrder($event)) {
+            $this->refreshTrackingStatus();
+        }
+    }
+
+    private function syncOrderState(Order $order): void
+    {
+        $this->orderReady = $order->status === OrderStatus::Ready;
+        $this->orderReceived = $order->kitchenTickets()->exists();
+    }
+
+    /**
+     * @param  array{order?: array{number?: string}|null}  $event
+     */
+    private function isTrackedOrder(array $event): bool
+    {
+        return $this->currentNumber !== ''
+            && isset($event['order']['number'])
+            && Order::numberKey((string) $event['order']['number']) === Order::numberKey($this->currentNumber);
     }
 };
 ?>
@@ -363,12 +400,21 @@ new #[Layout('layouts::guest')] class extends Component {
                     <flux:text class="text-8xl font-black tracking-tighter">
                         {{ $currentNumber }}
                     </flux:text>
-                    <flux:text class="text-lg uppercase tracking-widest font-semibold">
-                        {{ __('Preparing...') }}
-                    </flux:text>
-                    <flux:text class="text-sm">
-                        {{ __('We will notify you as soon as it is ready.') }}
-                    </flux:text>
+                    @if ($orderReceived)
+                        <flux:text class="text-lg uppercase tracking-widest font-semibold">
+                            {{ __('Your order is being prepared') }}
+                        </flux:text>
+                        <flux:text class="text-sm">
+                            {{ __('The kitchen has your order. We will notify you as soon as it is ready.') }}
+                        </flux:text>
+                    @else
+                        <flux:text class="text-lg uppercase tracking-widest font-semibold">
+                            {{ __('Preparing...') }}
+                        </flux:text>
+                        <flux:text class="text-sm">
+                            {{ __('We will notify you as soon as it is ready.') }}
+                        </flux:text>
+                    @endif
                     <flux:button wire:click="stopTracking" data-umami-event="track-cancel" class="mt-4 w-full" size="sm">
                         {{ __('Cancel') }}
                     </flux:button>

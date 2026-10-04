@@ -1,0 +1,7 @@
+[Unit]
+Description=Reboot requested from the TV control page
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/rm -f /var/lib/private/kitchen-tickets/reboot-requested
+ExecStart=/usr/bin/systemctl reboot
