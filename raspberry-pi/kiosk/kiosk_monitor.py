@@ -58,6 +58,7 @@ class Cec:
     def __init__(self):
         self.lock = threading.Lock()
         self.last_error = None
+        self.last_state = None
 
     def run(self, command):
         with self.lock:
@@ -84,6 +85,7 @@ class Cec:
             return
         log.info("turning TV %s via CEC", state)
         self.run(command)
+        self.last_state = state
 
     def power_status(self):
         """What the TV itself reports: on, standby, in transition ..., or unknown (no answer)."""
@@ -174,11 +176,15 @@ def handle_status(status, cec, reporter=None):
 
 
 def sync_with_api(url, token, cec, reporter=None):
+    """Catch up on a state change missed while disconnected. Re-sending the state the TV
+    already has would wake it up again on every reconnect, so that is skipped."""
     try:
         resp = requests.get(url, headers={"Authorization": f"Bearer {token}", "Accept": "application/json"},
                             timeout=5)
         resp.raise_for_status()
-        handle_status(resp.json().get("status", "on"), cec, reporter)
+        status = resp.json().get("status", "on")
+        if status != cec.last_state:
+            handle_status(status, cec, reporter)
     except (requests.RequestException, ValueError) as e:
         log.error("could not fetch the TV status: %s", e)
 
@@ -220,7 +226,8 @@ def run():
     # A loop instead of reconnecting from on_close: that recursed and grew the stack on every reconnect.
     while True:
         ws = websocket.WebSocketApp(url, on_message=on_message, on_error=on_error)
-        ws.run_forever(ping_interval=60, ping_timeout=10)
+        # Ping well within the 60 s idle timeout of the proxy in front of Reverb, or it drops the connection.
+        ws.run_forever(ping_interval=25, ping_timeout=10)
         log.info("connection closed, reconnecting in 5s")
         time.sleep(5)
 

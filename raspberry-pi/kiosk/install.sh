@@ -13,6 +13,7 @@ KIOSK_USER=${KIOSK_USER:-${SUDO_USER:-}}
 KIOSK_URL=${KIOSK_URL:-https://keuken.pinoke.net}
 KIOSK_REVERB_HOST=${KIOSK_REVERB_HOST:-order.larsfixt.nl}
 KIOSK_REVERB_APP_KEY=${KIOSK_REVERB_APP_KEY:-}
+KIOSK_LOCALE=${KIOSK_LOCALE:-nl_NL.UTF-8}
 
 [ "$(id -u)" -eq 0 ] || { echo "run as root (sudo)" >&2; exit 1; }
 [ -n "$KIOSK_USER" ] && id "$KIOSK_USER" >/dev/null 2>&1 || { echo "set KIOSK_USER to the desktop user" >&2; exit 1; }
@@ -80,6 +81,28 @@ screensaver_timeout = -1
 WAYFIRE
 if command -v raspi-config >/dev/null; then
     raspi-config nonint do_blanking 1   # 1 = screen blanking off
+fi
+
+echo "== browser languages (the display follows the language the browser asks for)"
+install -d -m 755 /etc/chromium/policies/managed
+lang_tag=$(echo "$KIOSK_LOCALE" | cut -d. -f1 | tr _ -)
+printf '{\n    "ForcedLanguages": ["%s", "%s"]\n}\n' "$lang_tag" "${lang_tag%%-*}" > /etc/chromium/policies/managed/kiosk.json
+chmod 644 /etc/chromium/policies/managed/kiosk.json
+
+echo "== system language $KIOSK_LOCALE"
+if command -v raspi-config >/dev/null; then
+    raspi-config nonint do_change_locale "$KIOSK_LOCALE"
+else
+    sed -i "s/^# *\($KIOSK_LOCALE\)/\1/" /etc/locale.gen
+    locale-gen
+    update-locale LANG="$KIOSK_LOCALE"
+fi
+
+echo "== Wi-Fi power saving off (it causes lag and dropped connections)"
+if command -v nmcli >/dev/null && systemctl is-active -q NetworkManager; then
+    nmcli -t -f NAME,TYPE connection show | awk -F: '$2 == "802-11-wireless" {print $1}' |
+        while read -r name; do nmcli connection modify "$name" 802-11-wireless.powersave 2; done
+    for dev in $(nmcli -t -f DEVICE,TYPE device | awk -F: '$2 == "wifi" {print $1}'); do iw dev "$dev" set power_save off 2>/dev/null || true; done
 fi
 
 echo "== firewall"

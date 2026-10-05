@@ -2,6 +2,8 @@
 # Started by the desktop session (labwc or wayfire autostart). Keeps Chromium running full screen.
 URL=${1:?usage: kiosk-browser.sh <url>}
 PREFS="$HOME/.config/chromium/Default/Preferences"
+# The languages sent to websites (Accept-Language) are fixed by the ForcedLanguages policy
+# that install.sh writes; --lang only sets the browser's own interface language.
 
 while true; do
     # After a crash or power cut Chromium shows a "restore pages?" bar: mark the last exit as clean.
@@ -11,6 +13,8 @@ while true; do
 
     chromium "$URL" \
         --kiosk \
+        --lang=nl-NL \
+        --force-dark-mode \
         --ozone-platform=wayland \
         --noerrdialogs \
         --disable-infobars \

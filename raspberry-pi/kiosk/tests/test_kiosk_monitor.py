@@ -121,5 +121,33 @@ class HandleStatusTest(unittest.TestCase):
         self.assertEqual(calls, [("tv", "off"), ("report",)])
 
 
+class SyncWithApiTest(unittest.TestCase):
+    def setUp(self):
+        self.sent = []
+        self.cec = kiosk_monitor.Cec()
+        self.cec.run = lambda command: self.sent.append(command)
+        answer = types.SimpleNamespace(raise_for_status=lambda: None, json=lambda: {"status": self.status})
+        self.original_get = getattr(kiosk_monitor.requests, "get", None)
+        kiosk_monitor.requests.get = lambda *args, **kwargs: answer
+
+    def tearDown(self):
+        kiosk_monitor.requests.get = self.original_get
+
+    def test_a_reconnect_does_not_resend_the_state_the_tv_already_has(self):
+        self.status = "on"
+        kiosk_monitor.sync_with_api("https://app/api/kiosk/tv-status", "token", self.cec)
+        kiosk_monitor.sync_with_api("https://app/api/kiosk/tv-status", "token", self.cec)
+
+        self.assertEqual(self.sent, ["on 0\n"])
+
+    def test_a_reconnect_applies_a_change_missed_while_disconnected(self):
+        self.status = "on"
+        kiosk_monitor.sync_with_api("https://app/api/kiosk/tv-status", "token", self.cec)
+        self.status = "off"
+        kiosk_monitor.sync_with_api("https://app/api/kiosk/tv-status", "token", self.cec)
+
+        self.assertEqual(self.sent, ["on 0\n", "standby 0\n"])
+
+
 if __name__ == "__main__":
     unittest.main()
