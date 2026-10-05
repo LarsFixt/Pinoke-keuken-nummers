@@ -70,6 +70,13 @@ else
     echo "NetworkManager not found: make sure $MIRROR gets no IP address yourself" >&2
 fi
 
+echo "== Wi-Fi power saving off (it causes lag and dropped connections)"
+if command -v nmcli >/dev/null && systemctl is-active -q NetworkManager; then
+    nmcli -t -f NAME,TYPE connection show | awk -F: '$2 == "802-11-wireless" {print $1}' |
+        while read -r name; do nmcli connection modify "$name" 802-11-wireless.powersave 2; done
+    for dev in $(nmcli -t -f DEVICE,TYPE device | awk -F: '$2 == "wifi" {print $1}'); do iw dev "$dev" set power_save off 2>/dev/null || true; done
+fi
+
 echo "== firewall"
 sed -e "s/@MIRROR@/$MIRROR/g" -e "s/@UPLINK@/$UPLINK/g" nftables.conf > /etc/nftables.conf
 chmod 600 /etc/nftables.conf
