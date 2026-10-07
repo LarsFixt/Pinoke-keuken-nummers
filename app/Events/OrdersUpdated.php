@@ -9,7 +9,7 @@ use Illuminate\Foundation\Events\Dispatchable;
 use Illuminate\Queue\SerializesModels;
 
 /**
- * Several orders changed at once from the kitchen (all ready, all removed, all deleted).
+ * Several orders changed at once from the kitchen (all ready, all removed, all deleted) or by a ready order timing out.
  * One event instead of one per order, so screens refresh once and the display rings its bell once.
  */
 class OrdersUpdated implements ShouldBroadcastNow

@@ -37,16 +37,16 @@ new class extends Component
             return;
         }
 
-        $order = Order::matchingNumber($number)->first();
+        $order = Order::currentOrNewForNumber($number);
 
         // Prevent duplicate orders with the same number
-        if ($order?->status === OrderStatus::Ready) {
+        if ($order->status === OrderStatus::Ready) {
             Flux::toast(__('An order with this number is already ready.'), variant: 'danger');
 
             return;
         }
 
-        $this->announceReady($order ?? new Order(['number' => $number]));
+        $this->announceReady($order);
     }
 
     /**
@@ -136,7 +136,7 @@ new class extends Component
         $orderIds = Order::ready()->pluck('id');
 
         DB::transaction(function () use ($orderIds): void {
-            Order::whereIn('id', $orderIds)->update(['status' => OrderStatus::Completed]);
+            Order::whereIn('id', $orderIds)->update(['status' => OrderStatus::Completed, 'completed_at' => now()]);
             PushSubscription::whereIn('order_id', $orderIds)->delete();
         });
 
@@ -155,7 +155,11 @@ new class extends Component
     #[Computed]
     public function recentlyCompletedOrders()
     {
-        return Order::where('status', OrderStatus::Completed)->latest('updated_at')->limit(5)->get();
+        return Order::where('status', OrderStatus::Completed)
+            ->where('completed_at', '>', now()->subHours(Order::NUMBER_REUSE_AFTER_HOURS))
+            ->latest('completed_at')
+            ->limit(5)
+            ->get();
     }
 
     #[Computed]

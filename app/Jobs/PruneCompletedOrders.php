@@ -2,7 +2,6 @@
 
 namespace App\Jobs;
 
-use App\Models\KitchenTicket;
 use App\Models\Order;
 use App\OrderStatus;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -19,13 +18,13 @@ class PruneCompletedOrders implements ShouldQueue
     {
         // Ticketed orders the kitchen never called are long gone by now.
         Order::inPreparation()
-            ->where('updated_at', '<=', now()->subHours(3))
-            ->update(['status' => OrderStatus::Completed]);
+            ->where('updated_at', '<=', now()->subHours(Order::NUMBER_REUSE_AFTER_HOURS))
+            ->update(['status' => OrderStatus::Completed, 'completed_at' => now()]);
 
-        Order::where('status', OrderStatus::Completed)
-            ->where('updated_at', '<=', now()->subDay())
+        // A customer typed a number on the track page but no ticket ever came: nothing worth keeping.
+        Order::where('status', OrderStatus::Pending)
+            ->whereDoesntHave('kitchenTickets')
+            ->where('created_at', '<=', now()->subHours(Order::NUMBER_REUSE_AFTER_HOURS))
             ->delete();
-
-        KitchenTicket::where('created_at', '<=', now()->subWeek())->delete();
     }
 }

@@ -1,7 +1,7 @@
 <?php
 
+use App\Jobs\CompleteExpiredReadyOrders;
 use App\Jobs\PruneCompletedOrders;
-use App\Jobs\PruneExpiredOrderPushSubscriptions;
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Schedule;
@@ -10,8 +10,8 @@ Artisan::command('inspire', function () {
     $this->comment(Inspiring::quote());
 })->purpose('Display an inspiring quote');
 
-// Remove push subscriptions for orders that have been sitting ready for 30 minutes.
-Schedule::job(PruneExpiredOrderPushSubscriptions::class)->everyMinute();
+// Complete orders that have been sitting ready for 30 minutes and remove their push subscriptions.
+Schedule::job(CompleteExpiredReadyOrders::class)->everyMinute();
 
-// Remove completed orders that are older than 24 hours.
+// Close forgotten orders and remove tracked numbers that never got a ticket. Order history is kept.
 Schedule::job(PruneCompletedOrders::class)->dailyAt('03:00')->timezone('Europe/Amsterdam');

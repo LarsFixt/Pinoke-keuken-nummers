@@ -2,6 +2,7 @@
 
 use App\Models\KitchenTicket;
 use App\Models\Order;
+use App\OrderStatus;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 
 uses(RefreshDatabase::class);
@@ -134,4 +135,15 @@ it('shows the order as received once its kitchen ticket arrives', function () {
 
     $component->call('checkOrderReceived', ['order' => ['number' => '0317']])
         ->assertSet('orderReceived', true);
+});
+
+it('tracks a new order when the number was last used more than three hours ago', function () {
+    $old = Order::factory()->create(['number' => '42', 'status' => 'ready', 'created_at' => now()->subHours(4)]);
+
+    Livewire\Livewire::test('pages::track')
+        ->call('startWatching', '42')
+        ->assertSet('orderReady', false);
+
+    expect(Order::count())->toBe(2)
+        ->and($old->fresh()->status)->toBe(OrderStatus::Completed);
 });
