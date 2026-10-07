@@ -17,7 +17,7 @@ class KioskTvController extends Controller
     public function getStatus(Request $request)
     {
         return response()->json([
-            'status' => Cache::get('kiosk_tv_status', 'on'),
+            'status' => Cache::get(PiStatus::KIOSK_TV_STATUS_KEY, 'on'),
         ]);
     }
 
@@ -48,7 +48,7 @@ class KioskTvController extends Controller
     {
         $request->validate(['status' => 'required|in:on,off']);
 
-        Cache::put('kiosk_tv_status', $request->status);
+        Cache::put(PiStatus::KIOSK_TV_STATUS_KEY, $request->status);
         broadcast(new TvStatusUpdated($request->status));
 
         return response()->json(['status' => $request->status]);

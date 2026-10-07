@@ -47,3 +47,12 @@ it('completes ticketed orders the kitchen never called after three hours', funct
         ->and($stale->fresh()->completed_at)->not->toBeNull()
         ->and($fresh->fresh()->status)->toBe(OrderStatus::Pending);
 });
+
+it('completes ticketed orders that came in while the display was off after three hours', function () {
+    $hidden = Order::factory()->create(['status' => OrderStatus::Pending, 'is_shown_in_preparation' => false, 'updated_at' => now()->subHours(4)]);
+    KitchenTicket::factory()->for($hidden)->create();
+
+    (new PruneCompletedOrders)->handle();
+
+    expect($hidden->fresh()->status)->toBe(OrderStatus::Completed);
+});

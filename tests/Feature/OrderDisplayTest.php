@@ -307,6 +307,40 @@ it('warns the kitchen when the ticket reader has gone quiet', function () {
         ->assertSee(__('Ticket reader offline'));
 });
 
+it('hides the numpad by default because tickets come in through the ticket reader', function () {
+    Livewire::actingAs(User::factory()->create(['is_admin' => true]))
+        ->test('pages::kitchen')
+        ->assertSet('isNumpadVisible', false)
+        ->assertDontSeeHtml('$wire.callOrder(currentNumber)')
+        ->set('isNumpadVisible', true)
+        ->assertSeeHtml('$wire.callOrder(currentNumber)');
+});
+
+it('shows the numpad straight away when the ticket reader has gone quiet', function () {
+    cache()->forever(PiStatus::BRIDGE_LAST_SEEN_KEY, now()->subMinutes(5)->getTimestamp());
+
+    Livewire::actingAs(User::factory()->create(['is_admin' => true]))
+        ->test('pages::kitchen')
+        ->assertSet('isNumpadVisible', true);
+});
+
+it('shows the local order time on the kitchen order cards', function () {
+    $order = Order::factory()->create(['number' => '0317', 'status' => OrderStatus::Pending, 'ordered_at' => '2026-10-02 16:01:00']);
+    KitchenTicket::factory()->for($order)->create();
+
+    Livewire::actingAs(User::factory()->create(['is_admin' => true]))
+        ->test('pages::kitchen')
+        ->assertSeeInOrder(['0317', '18:01']);
+});
+
+it('tells the kitchen that new tickets are not shown while the display is off', function () {
+    cache()->put(PiStatus::KIOSK_TV_STATUS_KEY, 'off');
+
+    Livewire::actingAs(User::factory()->create(['is_admin' => true]))
+        ->test('pages::kitchen')
+        ->assertSee(__('Display off'));
+});
+
 it('shows ticketed orders as being prepared on the public display', function () {
     $order = Order::factory()->create(['number' => '0317', 'status' => OrderStatus::Pending]);
     KitchenTicket::factory()->for($order)->create();

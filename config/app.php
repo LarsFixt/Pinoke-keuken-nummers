@@ -68,6 +68,12 @@ return [
     'timezone' => 'UTC',
 
     /*
+    | Times are stored in UTC and shown in the club's local time.
+    */
+
+    'display_timezone' => 'Europe/Amsterdam',
+
+    /*
     |--------------------------------------------------------------------------
     | Application Locale Configuration
     |--------------------------------------------------------------------------

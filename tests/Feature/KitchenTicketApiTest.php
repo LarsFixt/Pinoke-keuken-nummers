@@ -141,7 +141,7 @@ test('a reused number closes the old order the kitchen never completed', functio
         ->and(Order::where('status', OrderStatus::Pending)->count())->toBe(1);
 });
 
-test('stores each ticket line as an order item and the print time as the order time', function (): void {
+test('stores each ticket line as an order item and the capture time as the order time', function (): void {
     $response = sendSigned('/api/kitchen-tickets', ticketPayload([
         'items' => [
             ['qty' => 2, 'name' => 'Tosti ham/kaas', 'notes' => ['zonder ham']],
@@ -152,7 +152,7 @@ test('stores each ticket line as an order item and the print time as the order t
     $order = Order::findOrFail($response->json('order_id'));
     $ticket = $order->kitchenTickets()->sole();
 
-    expect($order->ordered_at->toIso8601String())->toBe('2026-10-02T16:01:00+00:00')
+    expect($order->ordered_at->toIso8601String())->toBe('2026-10-02T16:01:01+00:00')
         ->and($order->items()->orderBy('id')->get(['kitchen_ticket_id', 'quantity', 'name', 'notes'])->toArray())->toBe([
             ['kitchen_ticket_id' => $ticket->id, 'quantity' => 2, 'name' => 'Tosti ham/kaas', 'notes' => ['zonder ham']],
             ['kitchen_ticket_id' => $ticket->id, 'quantity' => 1, 'name' => 'Tosti kaas', 'notes' => []],
@@ -165,6 +165,33 @@ test('a ticket for an order that is already ready keeps it ready', function (): 
     sendSigned('/api/kitchen-tickets', ticketPayload())->assertCreated();
 
     expect($ready->fresh()->status)->toBe(OrderStatus::Ready);
+});
+
+test('a ticket that comes in while the display is off is kept for statistics but not shown in preparation', function (): void {
+    Cache::put(PiStatus::KIOSK_TV_STATUS_KEY, 'off');
+
+    $response = sendSigned('/api/kitchen-tickets', ticketPayload())->assertCreated();
+
+    $order = Order::findOrFail($response->json('order_id'));
+
+    expect($order->status)->toBe(OrderStatus::Pending)
+        ->and($order->items()->count())->toBe(1)
+        ->and(Order::inPreparation()->count())->toBe(0);
+});
+
+test('an extra ticket while the display is off keeps an order that is already in preparation on the board', function (): void {
+    sendSigned('/api/kitchen-tickets', ticketPayload())->assertCreated();
+    Cache::put(PiStatus::KIOSK_TV_STATUS_KEY, 'off');
+
+    sendSigned('/api/kitchen-tickets', ticketPayload(['id' => '6e247fd44f8f6b55-1']))->assertCreated();
+
+    expect(Order::inPreparation()->sole()->kitchenTickets()->count())->toBe(2);
+});
+
+test('uses the printed time as the order time when the bridge sends no capture time', function (): void {
+    $response = sendSigned('/api/kitchen-tickets', ticketPayload(['captured_at' => null]))->assertCreated();
+
+    expect(Order::findOrFail($response->json('order_id'))->ordered_at->toIso8601String())->toBe('2026-10-02T16:01:00+00:00');
 });
 
 test('a ticket without a readable number is kept for the kitchen without an order', function (): void {
