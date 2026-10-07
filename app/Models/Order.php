@@ -16,23 +16,67 @@ class Order extends Model
     /** @use HasFactory<OrderFactory> */
     use HasFactory, Notifiable;
 
-    protected $fillable = ['number', 'status'];
+    /**
+     * After this many hours the POS may hand out the same number again, so a ticket starts a new order.
+     */
+    public const int NUMBER_REUSE_AFTER_HOURS = 3;
+
+    protected $fillable = ['number', 'status', 'ordered_at'];
 
     /**
      * Cast the status attribute to an OrderStatus enum instance.
      */
     protected $casts = [
         'status' => OrderStatus::class,
+        'ordered_at' => 'datetime',
+        'ready_at' => 'datetime',
+        'completed_at' => 'datetime',
     ];
 
     /**
-     * Keep the lookup key in sync with the displayed number.
+     * Keep the lookup key in sync with the displayed number and record when the status changed.
      */
     protected static function booted(): void
     {
         static::saving(function (Order $order): void {
             $order->number_key = self::numberKey((string) $order->number);
+
+            if (! $order->isDirty('status')) {
+                return;
+            }
+
+            if ($order->status === OrderStatus::Completed) {
+                $order->completed_at = now();
+
+                return;
+            }
+
+            // Also when a pick-up is undone, so the order gets a fresh 30 minutes on the display.
+            if ($order->status === OrderStatus::Ready && ! $order->isDirty('ready_at')) {
+                $order->ready_at = now();
+            }
+
+            $order->completed_at = null;
         });
+    }
+
+    /**
+     * The order that currently owns this number, or a new one when the number is free or has been reused.
+     * Older orders with the number that were never completed are closed, so they do not linger on the display.
+     */
+    public static function currentOrNewForNumber(string $number): Order
+    {
+        $order = self::currentWithNumber($number)->lockForUpdate()->first();
+
+        if ($order) {
+            return $order;
+        }
+
+        self::matchingNumber($number)
+            ->where('status', '!=', OrderStatus::Completed)
+            ->update(['status' => OrderStatus::Completed, 'completed_at' => now()]);
+
+        return new Order(['number' => $number]);
     }
 
     /**
@@ -54,6 +98,18 @@ class Order extends Model
     }
 
     /**
+     * Scope a query to the latest order with this number that is recent enough to not be a reused number.
+     *
+     * @param  Builder<Order>  $query
+     */
+    public function scopeCurrentWithNumber(Builder $query, string $number): void
+    {
+        $query->matchingNumber($number)
+            ->where('created_at', '>', now()->subHours(self::NUMBER_REUSE_AFTER_HOURS))
+            ->latest('id');
+    }
+
+    /**
      * Scope a query to orders the kitchen received a ticket for but has not called yet.
      *
      * @param  Builder<Order>  $query
@@ -69,6 +125,14 @@ class Order extends Model
     public function kitchenTickets(): HasMany
     {
         return $this->hasMany(KitchenTicket::class);
+    }
+
+    /**
+     * Get the items from all tickets printed for this order.
+     */
+    public function items(): HasMany
+    {
+        return $this->hasMany(OrderItem::class);
     }
 
     /**

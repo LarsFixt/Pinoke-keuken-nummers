@@ -55,8 +55,12 @@ new #[Layout('layouts::guest')] class extends Component {
             return;
         }
 
-        $order = Order::matchingNumber($number)->first()
-            ?? Order::create(['number' => $number, 'status' => OrderStatus::Pending]);
+        $order = Order::currentOrNewForNumber($number);
+
+        if (! $order->exists) {
+            $order->status = OrderStatus::Pending;
+            $order->save();
+        }
 
         $this->currentNumber = $order->number;
         $this->syncOrderState($order);
@@ -68,7 +72,7 @@ new #[Layout('layouts::guest')] class extends Component {
             return;
         }
 
-        $order = Order::matchingNumber($this->currentNumber)->first();
+        $order = Order::currentWithNumber($this->currentNumber)->first();
 
         if ($order) {
             $order->updatePushSubscription($endpoint, $publicKey, $authToken, $contentEncoding);
@@ -88,7 +92,7 @@ new #[Layout('layouts::guest')] class extends Component {
             return;
         }
 
-        $order = Order::matchingNumber($this->currentNumber)->first();
+        $order = Order::currentWithNumber($this->currentNumber)->first();
 
         if (!$order) {
             return;

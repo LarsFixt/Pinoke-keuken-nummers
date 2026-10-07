@@ -5,14 +5,24 @@ use App\Models\KitchenTicket;
 use App\Models\Order;
 use App\OrderStatus;
 
-it('deletes completed orders older than 24 hours', function () {
-    $old = Order::factory()->create(['status' => OrderStatus::Completed, 'updated_at' => now()->subDay()->subMinute()]);
-    $recent = Order::factory()->create(['status' => OrderStatus::Completed, 'updated_at' => now()->subHours(23)]);
+it('keeps completed orders and their tickets as history', function () {
+    $old = Order::factory()->create(['status' => OrderStatus::Completed, 'created_at' => now()->subMonth(), 'updated_at' => now()->subMonth()]);
+    $ticket = KitchenTicket::factory()->for($old)->create(['created_at' => now()->subMonth()]);
 
     (new PruneCompletedOrders)->handle();
 
-    expect(Order::find($old->id))->toBeNull();
-    expect(Order::find($recent->id))->not->toBeNull();
+    expect(Order::find($old->id))->not->toBeNull()
+        ->and(KitchenTicket::find($ticket->id))->not->toBeNull();
+});
+
+it('deletes tracked numbers that never got a ticket after three hours', function () {
+    $abandoned = Order::factory()->create(['status' => OrderStatus::Pending, 'created_at' => now()->subHours(4)]);
+    $waiting = Order::factory()->create(['status' => OrderStatus::Pending, 'created_at' => now()->subHours(2)]);
+
+    (new PruneCompletedOrders)->handle();
+
+    expect(Order::find($abandoned->id))->toBeNull()
+        ->and(Order::find($waiting->id))->not->toBeNull();
 });
 
 it('does not delete ready or pending orders', function () {
@@ -34,5 +44,6 @@ it('completes ticketed orders the kitchen never called after three hours', funct
     (new PruneCompletedOrders)->handle();
 
     expect($stale->fresh()->status)->toBe(OrderStatus::Completed)
+        ->and($stale->fresh()->completed_at)->not->toBeNull()
         ->and($fresh->fresh()->status)->toBe(OrderStatus::Pending);
 });

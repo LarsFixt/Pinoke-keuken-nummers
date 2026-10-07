@@ -108,12 +108,55 @@ test('a ticket attaches to the order a customer is already tracking without lead
         ->and($tracked->fresh()->kitchenTickets()->count())->toBe(1);
 });
 
-test('a reused number from a completed order starts in preparation again', function (): void {
-    $old = Order::factory()->create(['number' => '0317', 'status' => OrderStatus::Completed]);
+test('an extra ticket for an order completed less than three hours ago puts it back in preparation', function (): void {
+    $recent = Order::factory()->create(['number' => '0317', 'status' => OrderStatus::Completed, 'created_at' => now()->subHours(2)]);
 
     sendSigned('/api/kitchen-tickets', ticketPayload())->assertCreated();
 
-    expect($old->fresh()->status)->toBe(OrderStatus::Pending);
+    expect(Order::count())->toBe(1)
+        ->and($recent->fresh()->status)->toBe(OrderStatus::Pending)
+        ->and($recent->fresh()->completed_at)->toBeNull();
+});
+
+test('a number reused after three hours starts a new order and keeps the old one as history', function (): void {
+    $old = Order::factory()->create(['number' => '0317', 'status' => OrderStatus::Completed, 'created_at' => now()->subHours(3)->subMinute()]);
+    $oldTicket = KitchenTicket::factory()->for($old)->create();
+
+    $response = sendSigned('/api/kitchen-tickets', ticketPayload())->assertCreated();
+
+    $new = Order::findOrFail($response->json('order_id'));
+
+    expect($new->is($old))->toBeFalse()
+        ->and($new->status)->toBe(OrderStatus::Pending)
+        ->and($old->fresh()->status)->toBe(OrderStatus::Completed)
+        ->and($old->kitchenTickets()->sole()->is($oldTicket))->toBeTrue();
+});
+
+test('a reused number closes the old order the kitchen never completed', function (): void {
+    $stale = Order::factory()->create(['number' => '0317', 'status' => OrderStatus::Ready, 'created_at' => now()->subHours(5)]);
+
+    sendSigned('/api/kitchen-tickets', ticketPayload())->assertCreated();
+
+    expect($stale->fresh()->status)->toBe(OrderStatus::Completed)
+        ->and(Order::where('status', OrderStatus::Pending)->count())->toBe(1);
+});
+
+test('stores each ticket line as an order item and the print time as the order time', function (): void {
+    $response = sendSigned('/api/kitchen-tickets', ticketPayload([
+        'items' => [
+            ['qty' => 2, 'name' => 'Tosti ham/kaas', 'notes' => ['zonder ham']],
+            ['qty' => 1, 'name' => 'Tosti kaas', 'notes' => []],
+        ],
+    ]))->assertCreated();
+
+    $order = Order::findOrFail($response->json('order_id'));
+    $ticket = $order->kitchenTickets()->sole();
+
+    expect($order->ordered_at->toIso8601String())->toBe('2026-10-02T16:01:00+00:00')
+        ->and($order->items()->orderBy('id')->get(['kitchen_ticket_id', 'quantity', 'name', 'notes'])->toArray())->toBe([
+            ['kitchen_ticket_id' => $ticket->id, 'quantity' => 2, 'name' => 'Tosti ham/kaas', 'notes' => ['zonder ham']],
+            ['kitchen_ticket_id' => $ticket->id, 'quantity' => 1, 'name' => 'Tosti kaas', 'notes' => []],
+        ]);
 });
 
 test('a ticket for an order that is already ready keeps it ready', function (): void {

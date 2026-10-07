@@ -396,3 +396,49 @@ it('dismisses all tickets whose number could not be read', function () {
 
     expect(KitchenTicket::needsAttention()->count())->toBe(0);
 });
+
+it('calls a new order when the number was last used more than three hours ago', function () {
+    Event::fake([OrderReady::class]);
+
+    $user = User::factory()->create(['is_admin' => true]);
+    $old = Order::factory()->create(['number' => '42', 'status' => OrderStatus::Completed, 'created_at' => now()->subHours(4)]);
+
+    Livewire::actingAs($user)
+        ->test('pages::kitchen')
+        ->call('callOrder', '42');
+
+    $new = Order::where('status', OrderStatus::Ready)->sole();
+
+    expect($new->is($old))->toBeFalse()
+        ->and($old->fresh()->status)->toBe(OrderStatus::Completed);
+});
+
+it('records when an order was called and picked up', function () {
+    Event::fake([OrderReady::class, OrderCompleted::class]);
+
+    $user = User::factory()->create(['is_admin' => true]);
+
+    $kitchen = Livewire::actingAs($user)->test('pages::kitchen')->call('callOrder', '42');
+
+    $order = Order::sole();
+    expect($order->ready_at)->not->toBeNull()
+        ->and($order->completed_at)->toBeNull();
+
+    $kitchen->call('completeOrder', $order->id);
+
+    expect($order->fresh()->completed_at)->not->toBeNull()
+        ->and($order->fresh()->ready_at->equalTo($order->ready_at))->toBeTrue();
+});
+
+it('gives a re-added order a fresh time on the display', function () {
+    Event::fake([OrderReady::class]);
+
+    $user = User::factory()->create(['is_admin' => true]);
+    $order = Order::factory()->create(['status' => OrderStatus::Completed, 'ready_at' => now()->subHour()]);
+
+    Livewire::actingAs($user)
+        ->test('pages::kitchen')
+        ->call('reactivateOrder', $order->id);
+
+    expect($order->fresh()->ready_at->isAfter(now()->subMinute()))->toBeTrue();
+});

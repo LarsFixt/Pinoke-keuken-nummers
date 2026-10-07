@@ -8,7 +8,9 @@ use App\Events\OrderReceived;
 use App\Models\KitchenTicket;
 use App\Models\Order;
 use App\OrderStatus;
+use Carbon\CarbonInterface;
 use Illuminate\Database\UniqueConstraintViolationException;
+use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -46,15 +48,17 @@ class IngestKitchenTicket
     private function store(array $payload): KitchenTicket
     {
         $ticketNumber = $payload['ticket_number'] ?? null;
+        $printedAt = $this->toAppTime($payload['printed_at'] ?? null);
         $order = null;
 
         if ($ticketNumber !== null && Order::numberKey($ticketNumber) !== '') {
-            $order = Order::matchingNumber($ticketNumber)->lockForUpdate()->first() ?? new Order;
+            $order = Order::currentOrNewForNumber($ticketNumber);
 
             // The ticket is the source of truth for how the number is written.
             $order->number = $ticketNumber;
+            $order->ordered_at ??= $printedAt ?? now();
 
-            // A completed order with this number is from a while ago: the number was reused.
+            // A recent completed order gets an extra ticket: put it back in preparation.
             if (! $order->exists || $order->status === OrderStatus::Completed) {
                 $order->status = OrderStatus::Pending;
             }
@@ -74,10 +78,25 @@ class IngestKitchenTicket
             'ocr_confidence' => $payload['ocr_confidence'] ?? null,
             'ticket_number_confidence' => $payload['ticket_number_confidence'] ?? null,
             'warnings' => $payload['warnings'],
-            'printed_at' => $payload['printed_at'] ?? null,
-            'captured_at' => $payload['captured_at'] ?? null,
+            'printed_at' => $printedAt,
+            'captured_at' => $this->toAppTime($payload['captured_at'] ?? null),
         ]);
 
+        $ticket->orderItems()->createMany(array_map(fn (array $item): array => [
+            'order_id' => $order?->id,
+            'quantity' => $item['qty'],
+            'name' => $item['name'],
+            'notes' => $item['notes'],
+        ], $payload['items']));
+
         return $ticket->setRelation('order', $order);
+    }
+
+    /**
+     * The bridge sends local times with an offset; convert them so they are not stored as if they were UTC.
+     */
+    private function toAppTime(?string $time): ?CarbonInterface
+    {
+        return $time === null ? null : Date::parse($time)->setTimezone(config('app.timezone'));
     }
 }

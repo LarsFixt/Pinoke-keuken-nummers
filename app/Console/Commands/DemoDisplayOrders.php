@@ -57,7 +57,7 @@ class DemoDisplayOrders extends Command
             $number++;
             $ticketNumber = str_pad((string) $number, 4, '0', STR_PAD_LEFT);
 
-            if (Order::matchingNumber($ticketNumber)->exists()) {
+            if (Order::currentWithNumber($ticketNumber)->exists()) {
                 continue;
             }
 
