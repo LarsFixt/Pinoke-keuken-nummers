@@ -52,6 +52,7 @@ class IngestKitchenTicket
     {
         $ticketNumber = $payload['ticket_number'] ?? null;
         $printedAt = $this->toAppTime($payload['printed_at'] ?? null);
+        $capturedAt = $this->toAppTime($payload['captured_at'] ?? null);
         $order = null;
 
         if ($ticketNumber !== null && Order::numberKey($ticketNumber) !== '') {
@@ -59,7 +60,8 @@ class IngestKitchenTicket
 
             // The ticket is the source of truth for how the number is written.
             $order->number = $ticketNumber;
-            $order->ordered_at ??= $printedAt ?? now();
+            // The capture time comes from the bridge's clock; the printed time is read by OCR and can be misread.
+            $order->ordered_at ??= $capturedAt ?? $printedAt ?? now();
 
             $isStarting = ! $order->exists || ! $order->kitchenTickets()->exists();
 
@@ -90,7 +92,7 @@ class IngestKitchenTicket
             'ticket_number_confidence' => $payload['ticket_number_confidence'] ?? null,
             'warnings' => $payload['warnings'],
             'printed_at' => $printedAt,
-            'captured_at' => $this->toAppTime($payload['captured_at'] ?? null),
+            'captured_at' => $capturedAt,
         ]);
 
         $ticket->orderItems()->createMany(array_map(fn (array $item): array => [
