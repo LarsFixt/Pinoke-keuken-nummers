@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\OrderStatus;
+use Carbon\CarbonInterface;
 use Database\Factories\OrderFactory;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
@@ -21,13 +22,14 @@ class Order extends Model
      */
     public const int NUMBER_REUSE_AFTER_HOURS = 3;
 
-    protected $fillable = ['number', 'status', 'ordered_at'];
+    protected $fillable = ['number', 'status', 'ordered_at', 'is_shown_in_preparation'];
 
     /**
      * Cast the status attribute to an OrderStatus enum instance.
      */
     protected $casts = [
         'status' => OrderStatus::class,
+        'is_shown_in_preparation' => 'boolean',
         'ordered_at' => 'datetime',
         'ready_at' => 'datetime',
         'completed_at' => 'datetime',
@@ -111,12 +113,21 @@ class Order extends Model
 
     /**
      * Scope a query to orders the kitchen received a ticket for but has not called yet.
+     * Tickets that came in while the number display was off are kept for statistics, but not shown.
      *
      * @param  Builder<Order>  $query
      */
     public function scopeInPreparation(Builder $query): void
     {
-        $query->where('status', OrderStatus::Pending)->whereHas('kitchenTickets');
+        $query->where('status', OrderStatus::Pending)->where('is_shown_in_preparation', true)->whereHas('kitchenTickets');
+    }
+
+    /**
+     * When the customer ordered: the print time of the first ticket, or when the order was created.
+     */
+    public function orderedAtOrCreatedAt(): CarbonInterface
+    {
+        return $this->ordered_at ?? $this->created_at;
     }
 
     /**

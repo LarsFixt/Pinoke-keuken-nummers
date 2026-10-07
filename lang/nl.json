@@ -141,5 +141,10 @@
     "Reboot Pi": "Pi herstarten",
     "The ticket reader restarts within a minute.": "De bonlezer herstart binnen een minuut.",
     "The ticket reader Pi reboots within a minute.": "De Pi van de bonlezer herstart binnen een minuut.",
-    "Not listening": "Luistert niet"
+    "Not listening": "Luistert niet",
+    "Display off": "Scherm uit",
+    "Hide numpad": "Numpad verbergen",
+    "No orders in preparation.": "Geen bestellingen in bereiding.",
+    "The display is off, so new tickets are not shown here.": "Het scherm staat uit, dus nieuwe bonnen worden hier niet getoond.",
+    "Go to TV control": "Ga naar TV-bediening"
 }

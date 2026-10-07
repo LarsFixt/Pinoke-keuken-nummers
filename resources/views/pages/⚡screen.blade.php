@@ -15,19 +15,19 @@ new class extends Component {
     public function mount()
     {
         // Fetch the current state from the cache on component load
-        $this->state['status'] = Cache::get('kiosk_tv_status', 'on');
+        $this->state['status'] = Cache::get(PiStatus::KIOSK_TV_STATUS_KEY, 'on');
     }
 
     public function toggle(string $newStatus)
     {
-        if (! in_array($newStatus, ['on', 'off'], true)) {
+        if (!in_array($newStatus, ['on', 'off'], true)) {
             return;
         }
 
         $this->state['status'] = $newStatus;
 
         // Store in cache so the Pi knows the state if it reboots
-        Cache::put('kiosk_tv_status', $newStatus);
+        Cache::put(PiStatus::KIOSK_TV_STATUS_KEY, $newStatus);
 
         // Instantly push the event via Reverb to the Raspberry Pi
         broadcast(new TvStatusUpdated($newStatus));
@@ -37,7 +37,7 @@ new class extends Component {
     {
         if (auth()->user()->is_super_admin) {
             // Store in cache so the Pi knows the state if it reboots
-            Cache::put('kiosk_tv_status', 'on');
+            Cache::put(PiStatus::KIOSK_TV_STATUS_KEY, 'on');
 
             // Instantly push the event via Reverb to the Raspberry Pi
             broadcast(new TvStatusUpdated('reboot'));
@@ -55,7 +55,7 @@ new class extends Component {
 
     public function rebootBridge(): void
     {
-        if (! auth()->user()->is_super_admin) {
+        if (!auth()->user()->is_super_admin) {
             return;
         }
 
@@ -118,23 +118,17 @@ new class extends Component {
     {
         $power = $this->kiosk['tv_power'] ?? null;
 
-        return $this->kioskOnline
-            && in_array($power, ['on', 'standby'], true)
-            && ($power === 'on') !== ($this->state['status'] === 'on');
+        return $this->kioskOnline && in_array($power, ['on', 'standby'], true) && ($power === 'on') !== ($this->state['status'] === 'on');
     }
 
     public function lastSeen(?array $status): string
     {
-        return isset($status['reported_at'])
-            ? CarbonImmutable::createFromTimestamp($status['reported_at'])->diffForHumans()
-            : __('never');
+        return isset($status['reported_at']) ? CarbonImmutable::createFromTimestamp($status['reported_at'])->diffForHumans() : __('never');
     }
 
     public function uptime(?array $status): string
     {
-        return isset($status['uptime_seconds'])
-            ? CarbonImmutable::now()->subSeconds($status['uptime_seconds'])->diffForHumans(syntax: CarbonInterface::DIFF_ABSOLUTE, parts: 2)
-            : '–';
+        return isset($status['uptime_seconds']) ? CarbonImmutable::now()->subSeconds($status['uptime_seconds'])->diffForHumans(syntax: CarbonInterface::DIFF_ABSOLUTE, parts: 2) : '–';
     }
 };
 ?>
@@ -169,14 +163,17 @@ new class extends Component {
                     @switch($this->kiosk['tv_power'] ?? null)
                         @case('on')
                             <flux:badge color="green" size="sm">{{ __('On') }}</flux:badge>
-                            @break
+                        @break
+
                         @case('standby')
                             <flux:badge size="sm">{{ __('Standby') }}</flux:badge>
-                            @break
+                        @break
+
                         @case('in transition from standby to on')
                         @case('in transition from on to standby')
                             <flux:badge color="sky" size="sm">{{ __('Switching') }}</flux:badge>
-                            @break
+                        @break
+
                         @default
                             <flux:badge color="amber" size="sm">{{ __('Unknown') }}</flux:badge>
                     @endswitch
@@ -304,19 +301,19 @@ new class extends Component {
                 </flux:callout>
             @endif
 
-            <div class="mt-6 flex flex-wrap items-center gap-2">
-                <flux:button wire:click="restartBridge" variant="outline" icon="arrow-path"
-                    wire:confirm="{{ __('Restart the ticket reader? Tickets printed during the few seconds it restarts are missed.') }}">
-                    {{ __('Restart reader') }}
-                </flux:button>
+            @if (auth()->user()->is_super_admin)
+                <div class="mt-6 flex flex-wrap items-center gap-2">
+                    <flux:button wire:click="restartBridge" variant="outline" icon="arrow-path"
+                        wire:confirm="{{ __('Restart the ticket reader? Tickets printed during the few seconds it restarts are missed.') }}">
+                        {{ __('Restart reader') }}
+                    </flux:button>
 
-                @if (auth()->user()->is_super_admin)
                     <flux:button wire:click="rebootBridge" variant="subtle" icon="power"
                         wire:confirm="{{ __('Reboot the ticket reader Pi? Tickets printed during the minute it is offline are missed.') }}">
                         {{ __('Reboot Pi') }}
                     </flux:button>
-                @endif
-            </div>
+                </div>
+            @endif
         </flux:card>
     </div>
 </div>

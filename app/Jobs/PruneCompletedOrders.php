@@ -17,7 +17,8 @@ class PruneCompletedOrders implements ShouldQueue
     public function handle(): void
     {
         // Ticketed orders the kitchen never called are long gone by now.
-        Order::inPreparation()
+        Order::where('status', OrderStatus::Pending)
+            ->whereHas('kitchenTickets')
             ->where('updated_at', '<=', now()->subHours(Order::NUMBER_REUSE_AFTER_HOURS))
             ->update(['status' => OrderStatus::Completed, 'completed_at' => now()]);
 

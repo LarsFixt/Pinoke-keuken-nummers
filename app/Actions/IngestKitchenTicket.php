@@ -8,6 +8,7 @@ use App\Events\OrderReceived;
 use App\Models\KitchenTicket;
 use App\Models\Order;
 use App\OrderStatus;
+use App\Services\PiStatus;
 use Carbon\CarbonInterface;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Support\Facades\Date;
@@ -18,6 +19,8 @@ use Illuminate\Support\Facades\DB;
  */
 class IngestKitchenTicket
 {
+    public function __construct(private PiStatus $piStatus) {}
+
     /**
      * @param  array{id: string, ticket_number?: ?string, ticket_number_confidence?: ?float, register?: ?int, register_name?: ?string, station?: ?string, printed_at?: ?string, captured_at?: ?string, items: list<array{qty: int, name: string, notes: list<string>}>, raw_text?: ?string, ocr_confidence?: ?float, warnings: list<string>}  $payload
      * @return array{ticket: KitchenTicket, duplicate: bool}
@@ -58,9 +61,17 @@ class IngestKitchenTicket
             $order->number = $ticketNumber;
             $order->ordered_at ??= $printedAt ?? now();
 
+            $isStarting = ! $order->exists || ! $order->kitchenTickets()->exists();
+
             // A recent completed order gets an extra ticket: put it back in preparation.
             if (! $order->exists || $order->status === OrderStatus::Completed) {
+                $isStarting = true;
                 $order->status = OrderStatus::Pending;
+            }
+
+            // With the number display off nobody watches the board, so the order is only kept for statistics.
+            if ($isStarting) {
+                $order->is_shown_in_preparation = $this->piStatus->displayIsOn();
             }
 
             $order->save();

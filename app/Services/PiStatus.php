@@ -23,6 +23,11 @@ class PiStatus
     public const string KIOSK_STATUS_KEY = 'kiosk_status';
 
     /**
+     * Whether the kitchen switched the number display on or off: "on" or "off".
+     */
+    public const string KIOSK_TV_STATUS_KEY = 'kiosk_tv_status';
+
+    /**
      * Commands the bridge understands.
      *
      * @var list<string>
@@ -48,6 +53,14 @@ class PiStatus
     public function kiosk(): ?array
     {
         return Cache::get(self::KIOSK_STATUS_KEY);
+    }
+
+    /**
+     * Whether the number display is switched on. It is off at quiet moments, when nobody watches it.
+     */
+    public function displayIsOn(): bool
+    {
+        return Cache::get(self::KIOSK_TV_STATUS_KEY, 'on') === 'on';
     }
 
     public function recordBridgeSeen(): void

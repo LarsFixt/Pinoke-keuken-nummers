@@ -167,6 +167,27 @@ test('a ticket for an order that is already ready keeps it ready', function (): 
     expect($ready->fresh()->status)->toBe(OrderStatus::Ready);
 });
 
+test('a ticket that comes in while the display is off is kept for statistics but not shown in preparation', function (): void {
+    Cache::put(PiStatus::KIOSK_TV_STATUS_KEY, 'off');
+
+    $response = sendSigned('/api/kitchen-tickets', ticketPayload())->assertCreated();
+
+    $order = Order::findOrFail($response->json('order_id'));
+
+    expect($order->status)->toBe(OrderStatus::Pending)
+        ->and($order->items()->count())->toBe(1)
+        ->and(Order::inPreparation()->count())->toBe(0);
+});
+
+test('an extra ticket while the display is off keeps an order that is already in preparation on the board', function (): void {
+    sendSigned('/api/kitchen-tickets', ticketPayload())->assertCreated();
+    Cache::put(PiStatus::KIOSK_TV_STATUS_KEY, 'off');
+
+    sendSigned('/api/kitchen-tickets', ticketPayload(['id' => '6e247fd44f8f6b55-1']))->assertCreated();
+
+    expect(Order::inPreparation()->sole()->kitchenTickets()->count())->toBe(2);
+});
+
 test('a ticket without a readable number is kept for the kitchen without an order', function (): void {
     sendSigned('/api/kitchen-tickets', ticketPayload(['ticket_number' => null, 'warnings' => ['NO TICKET NUMBER']]))
         ->assertCreated();
