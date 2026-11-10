@@ -17,6 +17,7 @@ Route::middleware(['auth', 'verified', IsAdmin::class])->group(function () {
     Route::livewire('dashboard', 'pages::kitchen')->name('dashboard');
     Route::livewire('messages', 'pages::messages')->name('messages');
     Route::livewire('feedback', 'pages::feedback')->name('feedback');
+    Route::livewire('orders', 'pages::orders')->name('orders');
     Route::livewire('tv-control', 'pages::screen')->name('tv-control');
 });
 

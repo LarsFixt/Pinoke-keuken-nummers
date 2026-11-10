@@ -6,6 +6,7 @@ use App\Events\OrderReceived;
 use App\Http\Middleware\VerifyTicketBridgeSignature;
 use App\Models\KitchenTicket;
 use App\Models\Order;
+use App\Models\Product;
 use App\OrderStatus;
 use App\Services\PiStatus;
 use Carbon\CarbonImmutable;
@@ -147,6 +148,7 @@ test('stores each ticket line as an order item and the capture time as the order
             ['qty' => 2, 'name' => 'Tosti ham/kaas', 'notes' => ['zonder ham']],
             ['qty' => 1, 'name' => 'Tosti kaas', 'notes' => []],
         ],
+        'raw_text' => "PRODUCTIEBON: Keuken\n2xTosti ham/kaas\nzonder ham\n1xTosti kaas\n2-okt-2026 18:01\nKassa 3 Keuken 0317",
     ]))->assertCreated();
 
     $order = Order::findOrFail($response->json('order_id'));
@@ -157,6 +159,35 @@ test('stores each ticket line as an order item and the capture time as the order
             ['kitchen_ticket_id' => $ticket->id, 'quantity' => 2, 'name' => 'Tosti ham/kaas', 'notes' => ['zonder ham']],
             ['kitchen_ticket_id' => $ticket->id, 'quantity' => 1, 'name' => 'Tosti kaas', 'notes' => []],
         ]);
+});
+
+test('reads the items from the ticket text, recovering a line the bridge dropped and linking it to its product', function (): void {
+    $product = Product::factory()->create(['name' => 'Br. Hamburger']);
+
+    sendSigned('/api/kitchen-tickets', ticketPayload([
+        'items' => [],
+        'raw_text' => "PRODUCTIEBON: Keuken\nAxBr. Hamburger\n2-okt-2026 18:01\nKassa 3 Keuken 0317",
+        'warnings' => ['no item lines recognised'],
+    ]))->assertCreated();
+
+    $ticket = KitchenTicket::sole();
+
+    expect($ticket->items)->toBe([['qty' => 1, 'name' => 'Br. Hamburger', 'notes' => [], 'qty_uncertain' => true]])
+        ->and($ticket->warnings)->toBe([])
+        ->and($ticket->orderItems()->sole())
+        ->product_id->toBe($product->id)
+        ->is_quantity_uncertain->toBeTrue();
+});
+
+test('keeps the items the bridge read when no item lines are found in the text', function (): void {
+    sendSigned('/api/kitchen-tickets', ticketPayload([
+        'items' => [['qty' => 3, 'name' => 'Friet', 'notes' => []]],
+        'raw_text' => "PRODUCTIEBON: Keuken\nKassa 3 Keuken 0317",
+    ]))->assertCreated();
+
+    expect(KitchenTicket::sole()->orderItems()->sole())
+        ->quantity->toBe(3)
+        ->name->toBe('Friet');
 });
 
 test('a ticket for an order that is already ready keeps it ready', function (): void {

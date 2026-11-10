@@ -19,7 +19,7 @@ use Illuminate\Support\Facades\DB;
  */
 class IngestKitchenTicket
 {
-    public function __construct(private PiStatus $piStatus) {}
+    public function __construct(private PiStatus $piStatus, private RecordTicketItems $recordTicketItems) {}
 
     /**
      * @param  array{id: string, ticket_number?: ?string, ticket_number_confidence?: ?float, register?: ?int, register_name?: ?string, station?: ?string, printed_at?: ?string, captured_at?: ?string, items: list<array{qty: int, name: string, notes: list<string>}>, raw_text?: ?string, ocr_confidence?: ?float, warnings: list<string>}  $payload
@@ -95,12 +95,7 @@ class IngestKitchenTicket
             'captured_at' => $capturedAt,
         ]);
 
-        $ticket->orderItems()->createMany(array_map(fn (array $item): array => [
-            'order_id' => $order?->id,
-            'quantity' => $item['qty'],
-            'name' => $item['name'],
-            'notes' => $item['notes'],
-        ], $payload['items']));
+        $this->recordTicketItems->handle($ticket);
 
         return $ticket->setRelation('order', $order);
     }
