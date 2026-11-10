@@ -139,6 +139,14 @@ class Order extends Model
     }
 
     /**
+     * Get the feedback guests gave once this order was ready.
+     */
+    public function feedback(): HasMany
+    {
+        return $this->hasMany(Feedback::class);
+    }
+
+    /**
      * Get the items from all tickets printed for this order.
      */
     public function items(): HasMany

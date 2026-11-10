@@ -12,4 +12,5 @@ if ('serviceWorker' in navigator) {
  * allow your team to quickly build robust real-time web applications.
  */
 
+import './analytics';
 import './echo';

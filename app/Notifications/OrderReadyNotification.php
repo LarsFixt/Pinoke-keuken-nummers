@@ -35,7 +35,12 @@ class OrderReadyNotification extends Notification
      */
     public function toWebPush(object $notifiable, object $notification): WebPushMessage
     {
-        $url = route('track', ['order' => $this->order->number]);
+        $url = route('track', [
+            'order' => $this->order->number,
+            'utm_source' => 'push',
+            'utm_medium' => 'notification',
+            'utm_campaign' => 'order-ready',
+        ]);
 
         return (new WebPushMessage)
             ->title(__('Your order is ready!'))

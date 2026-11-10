@@ -1,7 +1,7 @@
 {
     "name": "Pinoké Order Tracker",
     "short_name": "Pinoké Orders",
-    "start_url": "/",
+    "start_url": "/?utm_source=pwa&utm_medium=homescreen",
     "display": "standalone",
     "background_color": "#ffffff",
     "theme_color": "#18181b",

@@ -26,6 +26,10 @@
                 wire:navigate>
                 {{ __('Messages') }}
             </flux:sidebar.item>
+            <flux:sidebar.item icon="chat-bubble-left-right" :href="route('feedback')"
+                :current="request()->routeIs('feedback')" wire:navigate>
+                {{ __('Feedback') }}
+            </flux:sidebar.item>
 
             @if (auth()->user()->is_super_admin)
                 <flux:sidebar.item icon="user-group" :href="route('users')" :current="request()->routeIs('users')"
