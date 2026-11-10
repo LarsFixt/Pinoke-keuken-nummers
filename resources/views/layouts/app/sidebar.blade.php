@@ -18,6 +18,10 @@
                 wire:navigate>
                 {{ __('Dashboard') }}
             </flux:sidebar.item>
+            <flux:sidebar.item icon="chart-bar" :href="route('orders')" :current="request()->routeIs('orders')"
+                wire:navigate>
+                {{ __('Orders') }}
+            </flux:sidebar.item>
             <flux:sidebar.item icon="tv" :href="route('tv-control')" :current="request()->routeIs('tv-control')"
                 wire:navigate>
                 {{ __('TV Control') }}

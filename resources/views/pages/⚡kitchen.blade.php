@@ -364,7 +364,7 @@ new class extends Component {
                                 @foreach ($order->kitchenTickets as $ticket)
                                     @foreach ($ticket->items as $item)
                                         <flux:text size="sm" variant="strong" class="leading-snug">
-                                            {{ $item['qty'] }}× {{ $item['name'] }}</flux:text>
+                                            {{ $item['qty'] }}{{ empty($item['qty_uncertain']) ? '' : '?' }}× {{ $item['name'] }}</flux:text>
                                         @foreach ($item['notes'] as $note)
                                             <flux:text size="sm" class="pl-3 leading-snug">{{ $note }}
                                             </flux:text>

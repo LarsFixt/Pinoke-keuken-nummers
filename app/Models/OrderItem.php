@@ -23,7 +23,9 @@ class OrderItem extends Model
     protected $fillable = [
         'order_id',
         'kitchen_ticket_id',
+        'product_id',
         'quantity',
+        'is_quantity_uncertain',
         'name',
         'notes',
     ];
@@ -35,6 +37,7 @@ class OrderItem extends Model
     {
         return [
             'quantity' => 'integer',
+            'is_quantity_uncertain' => 'boolean',
             'notes' => 'array',
         ];
     }
@@ -47,6 +50,16 @@ class OrderItem extends Model
     public function order(): BelongsTo
     {
         return $this->belongsTo(Order::class);
+    }
+
+    /**
+     * Get the product this line was recognised as, if any.
+     *
+     * @return BelongsTo<Product, covariant $this>
+     */
+    public function product(): BelongsTo
+    {
+        return $this->belongsTo(Product::class);
     }
 
     /**
