@@ -5,7 +5,7 @@
     use BaconQrCode\Writer;
     use Illuminate\Support\Str;
 
-    $qrUrl = route('track', ['utm_source' => 'qr']);
+    $qrUrl = route('track', ['utm_source' => 'qr', 'utm_medium' => 'display', 'utm_campaign' => 'order-tracker']);
 
     $qrPaths = cache()->rememberForever('qr-code.v2.' . md5($qrUrl), function () use ($qrUrl): string {
         $svg = (new Writer(new ImageRenderer(new RendererStyle(256, 2), new SvgImageBackEnd())))->writeString($qrUrl);

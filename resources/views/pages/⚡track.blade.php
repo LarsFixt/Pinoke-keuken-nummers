@@ -1,8 +1,12 @@
 <?php
 
 use App\Models\Order;
+use App\NotificationTiming;
 use App\OrderStatus;
+use Illuminate\Support\Facades\Validator;
+use Illuminate\Validation\Rule;
 use Livewire\Attributes\Layout;
+use Livewire\Attributes\Locked;
 use Livewire\Attributes\Url;
 use Livewire\Component;
 
@@ -18,6 +22,16 @@ new #[Layout('layouts::guest')] class extends Component {
     public bool $orderReceived = false;
 
     public string $kitchenStatus = '';
+
+    /**
+     * The feedback this visit is filling in, so later answers update the same record.
+     */
+    #[Locked]
+    public ?int $feedbackId = null;
+
+    public ?int $feedbackRating = null;
+
+    public ?string $feedbackTiming = null;
 
     public function mount(): void
     {
@@ -84,6 +98,50 @@ new #[Layout('layouts::guest')] class extends Component {
         $this->currentNumber = '';
         $this->orderReady = false;
         $this->orderReceived = false;
+        $this->feedbackId = null;
+        $this->feedbackRating = null;
+        $this->feedbackTiming = null;
+    }
+
+    /**
+     * Store an answer from the feedback card. Each answer is saved straight away, so partial feedback is kept too.
+     *
+     * @param  array{rating?: int, notification_timing?: string, comment?: string|null}  $answers
+     * @param  array{wait_minutes?: int|null, notification_mode?: string|null, platform?: string|null, display_mode?: string|null, entry?: string|null}  $context
+     */
+    public function saveFeedback(array $answers, array $context = []): void
+    {
+        if (! $this->orderReady || $this->currentNumber === '') {
+            return;
+        }
+
+        $order = Order::currentWithNumber($this->currentNumber)->first();
+
+        if (! $order) {
+            return;
+        }
+
+        if (array_key_exists('comment', $answers)) {
+            $answers['comment'] = trim((string) $answers['comment']) ?: null;
+        }
+
+        $validated = Validator::make([...$context, ...$answers], [
+            'rating' => ['sometimes', 'integer', 'between:1,5'],
+            'notification_timing' => ['sometimes', Rule::enum(NotificationTiming::class)],
+            'comment' => ['sometimes', 'nullable', 'string', 'max:280'],
+            'wait_minutes' => ['sometimes', 'nullable', 'integer', 'between:0,600'],
+            'notification_mode' => ['sometimes', 'nullable', 'string', 'max:32'],
+            'platform' => ['sometimes', 'nullable', 'string', 'max:32'],
+            'display_mode' => ['sometimes', 'nullable', 'string', 'max:32'],
+            'entry' => ['sometimes', 'nullable', 'string', 'max:64'],
+        ])->validate();
+
+        $feedback = $order->feedback()->whereKey($this->feedbackId)->first() ?? $order->feedback()->make();
+        $feedback->fill($validated)->save();
+
+        $this->feedbackId = $feedback->id;
+        $this->feedbackRating = $feedback->rating;
+        $this->feedbackTiming = $feedback->notification_timing?->value;
     }
 
     public function refreshTrackingStatus(): void
@@ -134,7 +192,7 @@ new #[Layout('layouts::guest')] class extends Component {
 };
 ?>
 
-<flux:main>
+<flux:main class="px-4! py-4! sm:p-6!">
     @push('meta')
         <meta name="description"
             content="{{ __('Enter your order number and receive a notification the moment your food is ready for pick-up.') }}">
@@ -149,6 +207,10 @@ new #[Layout('layouts::guest')] class extends Component {
     @endpush
     <div class="flex flex-col items-center justify-center" x-data="{
         notified: @js($orderReady),
+        receivedTracked: @js($orderReceived),
+        feedbackState: 'open',
+        feedbackComment: '',
+        readyWaitMinutes: null,
         localNumber: '',
         notificationPermission: 'unsupported',
         notificationMode: 'echo-only',
@@ -162,23 +224,28 @@ new #[Layout('layouts::guest')] class extends Component {
         async init() {
             const userAgent = window.navigator.userAgent || '';
             const platform = window.navigator.platform || '';
-    
+
             this.isIos = /iPad|iPhone|iPod/.test(userAgent) || (platform === 'MacIntel' && window.navigator.maxTouchPoints > 1);
             this.isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
             this.supportsNotifications = 'Notification' in window;
             this.supportsPush = 'serviceWorker' in navigator && 'PushManager' in window;
             this.notificationPermission = this.supportsNotifications ? Notification.permission : 'unsupported';
             this.installTipDismissed = window.localStorage.getItem('track_install_tip_dismissed') === '1';
-    
+
             this.updateNotificationMode();
             this.setupRefreshFallbacks();
-    
+
             if (this.notified) {
+                if (this.feedbackHandled($wire.currentNumber)) {
+                    this.feedbackState = 'closed';
+                }
+
                 await this.closePushNotifications();
             }
-    
+
             if ($wire.currentNumber && !$wire.orderReady) {
                 await this.activateBestNotificationAgent();
+                this.trackEvent('track-resume', { mode: this.notificationMode, received: $wire.orderReceived });
             }
         },
         setupRefreshFallbacks() {
@@ -187,13 +254,13 @@ new #[Layout('layouts::guest')] class extends Component {
                     $wire.refreshTrackingStatus();
                 }
             });
-    
+
             window.addEventListener('online', () => {
                 if ($wire.currentNumber && !$wire.orderReady) {
                     $wire.refreshTrackingStatus();
                 }
             });
-    
+
             this.backgroundRefreshInterval = window.setInterval(() => {
                 if ($wire.currentNumber && !$wire.orderReady) {
                     $wire.refreshTrackingStatus();
@@ -202,59 +269,63 @@ new #[Layout('layouts::guest')] class extends Component {
         },
         updateNotificationMode() {
             this.notificationPermission = this.supportsNotifications ? Notification.permission : 'unsupported';
-    
+
             if (this.isIos) {
                 this.notificationMode = 'echo-only-ios';
                 this.pushLinkState = 'unsupported';
-    
+
                 return;
             }
-    
+
             if (!this.supportsNotifications || !this.supportsPush) {
                 this.notificationMode = 'echo-only';
                 this.pushLinkState = 'unsupported';
-    
+
                 return;
             }
-    
+
             if (this.notificationPermission === 'granted') {
                 this.notificationMode = 'push-ready';
-    
+
                 return;
             }
-    
+
             if (this.notificationPermission === 'denied') {
                 this.notificationMode = 'push-blocked';
-    
+
                 return;
             }
-    
+
             this.notificationMode = 'permission-needed';
         },
         trackEvent(name, data = undefined) {
-            window.umami?.track(name, data);
+            window.analytics?.track(name, data);
         },
         dismissInstallTip() {
             this.installTipDismissed = true;
             window.localStorage.setItem('track_install_tip_dismissed', '1');
+            this.trackEvent('install-tip-dismissed');
         },
         async beginTracking() {
             if (!this.localNumber.length) {
                 return;
             }
-    
+
             await $wire.startWatching(this.localNumber);
             await this.activateBestNotificationAgent();
-            this.trackEvent('track-start', { mode: this.notificationMode });
+            if ($wire.currentNumber) {
+                window.analytics?.mark('track.' + $wire.currentNumber);
+            }
+            this.trackEvent('track-start', { mode: this.notificationMode, platform: window.analytics?.platform });
             this.localNumber = '';
         },
         async activateBestNotificationAgent() {
             this.updateNotificationMode();
-    
+
             if (this.notificationMode === 'permission-needed') {
                 await this.requestNotificationPermission();
             }
-    
+
             if (this.notificationMode === 'push-ready') {
                 await this.subscribeToPush();
             }
@@ -262,10 +333,10 @@ new #[Layout('layouts::guest')] class extends Component {
         async requestNotificationPermission() {
             if (!this.supportsNotifications || this.isIos || this.notificationPermission !== 'default') {
                 this.updateNotificationMode();
-    
+
                 return;
             }
-    
+
             this.notificationPermission = await Notification.requestPermission();
             this.updateNotificationMode();
             this.trackEvent('notification-permission', { result: this.notificationPermission });
@@ -289,46 +360,46 @@ new #[Layout('layouts::guest')] class extends Component {
         async subscribeToPush() {
             if (!this.supportsPush || this.notificationMode !== 'push-ready') {
                 this.pushLinkState = 'unsupported';
-    
+
                 return;
             }
-    
+
             this.pushLinkState = 'linking';
-    
+
             try {
                 const reg = await navigator.serviceWorker.ready;
                 const vapidPublicKey = '{{ config('webpush.vapid.public_key') }}';
                 if (!vapidPublicKey) {
                     this.pushLinkState = 'failed';
-    
+
                     return;
                 }
-    
+
                 const convertedVapidKey = this.urlBase64ToUint8Array(vapidPublicKey);
                 let subscription = await reg.pushManager.getSubscription();
-    
+
                 if (!subscription) {
                     subscription = await reg.pushManager.subscribe({
                         userVisibleOnly: true,
                         applicationServerKey: convertedVapidKey
                     });
                 }
-    
+
                 const key = subscription.getKey('p256dh');
                 const token = subscription.getKey('auth');
-    
+
                 if (!key || !token) {
                     this.pushLinkState = 'failed';
-    
+
                     return;
                 }
-    
+
                 const contentEncoding = (PushManager.supportedContentEncodings || ['aesgcm'])[0] || 'aesgcm';
-    
+
                 const endpoint = subscription.endpoint;
                 const publicKey = btoa(String.fromCharCode.apply(null, new Uint8Array(key)));
                 const authToken = btoa(String.fromCharCode.apply(null, new Uint8Array(token)));
-    
+
                 $wire.subscribeToPush(endpoint, publicKey, authToken, contentEncoding);
                 this.pushLinkState = 'linked';
                 this.trackEvent('push-subscribed');
@@ -348,6 +419,64 @@ new #[Layout('layouts::guest')] class extends Component {
             }
             return outputArray;
         },
+        orderBecameReady(number) {
+            this.notified = true;
+            this.readyWaitMinutes = window.analytics?.minutesSince('track.' + number) ?? null;
+            this.feedbackState = this.feedbackHandled(number) ? 'closed' : 'open';
+            this.trackEvent('order-ready', { mode: this.notificationMode, wait_minutes: this.readyWaitMinutes });
+            window.analytics?.forget('track.' + number);
+        },
+        feedbackKey(number) {
+            return 'lf.feedback.' + number;
+        },
+        feedbackHandled(number) {
+            try {
+                const handledAt = Number(window.localStorage.getItem(this.feedbackKey(number)));
+
+                return handledAt > 0 && Date.now() - handledAt < {{ \App\Models\Order::NUMBER_REUSE_AFTER_HOURS }} * 3600000;
+            } catch (e) {
+                return false;
+            }
+        },
+        rememberFeedbackHandled() {
+            try {
+                window.localStorage.setItem(this.feedbackKey($wire.currentNumber), String(Date.now()));
+            } catch (e) {}
+        },
+        async answerFeedback(answers) {
+            this.rememberFeedbackHandled();
+            await $wire.saveFeedback(answers, {
+                wait_minutes: this.readyWaitMinutes,
+                notification_mode: this.notificationMode,
+                ...(window.analytics?.sessionProperties() ?? {}),
+            });
+        },
+        async rateExperience(rating) {
+            await this.answerFeedback({ rating });
+            this.trackEvent('feedback-rating', { rating, mode: this.notificationMode });
+        },
+        async rateNotification(timing) {
+            await this.answerFeedback({ notification_timing: timing });
+            this.trackEvent('feedback-notified', { timing, mode: this.notificationMode });
+        },
+        async finishFeedback() {
+            if (this.feedbackComment.trim()) {
+                await this.answerFeedback({ comment: this.feedbackComment });
+                this.trackEvent('feedback-comment');
+            }
+
+            this.feedbackComment = '';
+            this.feedbackState = 'done';
+        },
+        skipFeedback() {
+            this.rememberFeedbackHandled();
+            this.trackEvent('feedback-dismissed', { answered: $wire.feedbackRating !== null || $wire.feedbackTiming !== null });
+            this.feedbackState = 'closed';
+        },
+        orderBecameReceived() {
+            this.receivedTracked = true;
+            this.trackEvent('order-received', { mode: this.notificationMode });
+        },
         playSound() {
             new Audio('/sound/bell.mp3').play();
         },
@@ -358,18 +487,20 @@ new #[Layout('layouts::guest')] class extends Component {
             notifications.forEach(n => n.close());
         },
     }"
-        x-effect="if ($wire.orderReady && !notified) { notified = true; trackEvent('order-ready'); playSound(); sendNotification($wire.currentNumber); closePushNotifications(); }">
-        <div class="text-center mb-8 w-full">
-            <flux:breadcrumbs class="mb-4">
+        x-effect="if (!$wire.currentNumber) { notified = false; receivedTracked = false; feedbackState = 'open'; } if ($wire.orderReceived && !receivedTracked) { orderBecameReceived(); } if ($wire.orderReady && !notified) { orderBecameReady($wire.currentNumber); playSound(); sendNotification($wire.currentNumber); closePushNotifications(); }">
+        <div class="mb-4 w-full text-center sm:mb-8">
+            <flux:breadcrumbs class="mb-3">
                 <flux:breadcrumbs.item href="{{ route('home') }}">{{ __('All orders') }}</flux:breadcrumbs.item>
                 <flux:breadcrumbs.item>{{ __('Track order') }}</flux:breadcrumbs.item>
             </flux:breadcrumbs>
-            <flux:text class="text-3xl font-black tracking-tight uppercase">
+            <flux:text class="text-2xl font-black tracking-tight uppercase sm:text-3xl">
                 {{ __('Track your order') }}
             </flux:text>
-            <flux:text class="text-base mt-2">
-                {{ __('Enter your number and we will let you know when your food is ready.') }}
-            </flux:text>
+            @unless ($currentNumber)
+                <flux:text class="mt-1 text-sm sm:mt-2 sm:text-base">
+                    {{ __('Enter your number and we will let you know when your food is ready.') }}
+                </flux:text>
+            @endunless
 
             @if ($kitchenStatus)
                 <flux:callout variant="warning" icon="megaphone" class="my-2" heading="{{ $kitchenStatus }}" />
@@ -377,31 +508,79 @@ new #[Layout('layouts::guest')] class extends Component {
         </div>
 
         @if ($orderReady)
-            {{-- Order ready --}}
-            <div class="w-full max-w-lg text-center">
-                <flux:card class="flex flex-col items-center justify-center gap-4 py-10">
-                    <flux:icon.check-circle class="w-20 h-20 text-green-500" />
-                    <flux:text class="text-8xl font-black tracking-tighter">
-                        {{ $currentNumber }}
-                    </flux:text>
-                    <flux:heading size="xl" class="text-green-500 uppercase font-bold">
+            {{-- Order ready. Every state block has its own wire:key, so Livewire swaps it whole instead of reusing Alpine elements from the previous state. --}}
+            <div wire:key="track-state-ready" class="flex w-full max-w-lg flex-col gap-3 text-center">
+                <flux:card class="flex flex-col items-center justify-center gap-1 px-4! py-5! sm:gap-3 sm:py-8!">
+                    <flux:icon.check-circle class="size-10 shrink-0 text-green-500 sm:size-14" />
+                    <flux:heading size="xl" class="text-green-500! font-bold uppercase">
                         {{ __('Your order is ready!') }}
                     </flux:heading>
-                    <flux:text class="text-lg">
+                    <flux:text class="text-7xl font-black tracking-tighter sm:text-8xl">
+                        {{ $currentNumber }}
+                    </flux:text>
+                    <flux:text class="text-base sm:text-lg">
                         {{ __('Come pick up your food!') }}
                     </flux:text>
-                    <flux:button wire:click="stopTracking" data-umami-event="track-another" variant="filled" class="mt-4 w-full">
-                        {{ __('Track another order') }}
-                    </flux:button>
                 </flux:card>
+
+                {{-- Feedback --}}
+                <flux:card wire:key="track-feedback" x-cloak x-show="feedbackState !== 'closed'" class="px-4! py-4! text-left sm:p-6!">
+                    <div x-show="feedbackState === 'open'" class="flex flex-col gap-4">
+                        <div>
+                            <flux:heading>{{ __('How was ordering and waiting today?') }}</flux:heading>
+                            <div class="mt-2 grid grid-cols-5 gap-1.5 sm:gap-2">
+                                @foreach ([1 => '😞', 2 => '🙁', 3 => '😐', 4 => '🙂', 5 => '😄'] as $score => $emoji)
+                                    <flux:button wire:key="feedback-rating-{{ $score }}" @click="rateExperience({{ $score }})"
+                                        :variant="$feedbackRating === $score ? 'primary' : 'filled'" class="h-12 px-0! text-2xl! sm:h-14 sm:text-3xl!"
+                                        aria-label="{{ __(':score out of 5', ['score' => $score]) }}">
+                                        {{ $emoji }}
+                                    </flux:button>
+                                @endforeach
+                            </div>
+                        </div>
+
+                        <div>
+                            <flux:heading>{{ __('Did we let you know in time that your order was ready?') }}</flux:heading>
+                            <div class="mt-2 grid gap-1.5 sm:grid-cols-3 sm:gap-2">
+                                @foreach (\App\NotificationTiming::cases() as $timing)
+                                    <flux:button wire:key="feedback-timing-{{ $timing->value }}"
+                                        @click="rateNotification('{{ $timing->value }}')"
+                                        :variant="$feedbackTiming === $timing->value ? 'primary' : 'filled'" size="sm">
+                                        {{ $timing->label() }}
+                                    </flux:button>
+                                @endforeach
+                            </div>
+                        </div>
+
+                        <div x-show="$wire.feedbackRating !== null || $wire.feedbackTiming !== null" class="flex flex-col gap-2">
+                            <flux:input x-model="feedbackComment" maxlength="280"
+                                :label="__('Anything we can do better? (optional)')" />
+                            <flux:button variant="primary" @click="finishFeedback()">
+                                <span x-text="feedbackComment.trim() ? @js(__('Send')) : @js(__('Done'))"></span>
+                            </flux:button>
+                        </div>
+
+                        <flux:button variant="ghost" size="xs" class="self-center" @click="skipFeedback()">
+                            {{ __('Skip') }}
+                        </flux:button>
+                    </div>
+
+                    <div x-show="feedbackState === 'done'" class="flex items-center gap-3">
+                        <flux:icon.heart class="size-6 shrink-0 text-blue-800" variant="solid" />
+                        <flux:text class="text-base">{{ __('Thanks for your feedback!') }}</flux:text>
+                    </div>
+                </flux:card>
+
+                <flux:button wire:click="stopTracking" data-umami-event="track-another" variant="filled" class="w-full">
+                    {{ __('Track another order') }}
+                </flux:button>
             </div>
         @elseif ($currentNumber)
             {{-- Watching state --}}
-
-            <div class="w-full max-w-lg text-center">
-                <flux:card class="flex flex-col items-center justify-center gap-4 py-10">
-                    <flux:icon.clock class="w-16 h-16 animate-pulse" />
-                    <flux:text class="text-8xl font-black tracking-tighter">
+            <div wire:key="track-state-watching" class="w-full max-w-lg text-center">
+                <flux:card class="flex flex-col items-center justify-center gap-2 px-4! py-6! sm:gap-4 sm:py-10!">
+                    <flux:icon.clock class="size-10 animate-pulse sm:size-16" />
+                    <flux:text class="text-7xl font-black tracking-tighter sm:text-8xl">
                         {{ $currentNumber }}
                     </flux:text>
                     @if ($orderReceived)
@@ -419,37 +598,37 @@ new #[Layout('layouts::guest')] class extends Component {
                             {{ __('We will notify you as soon as it is ready.') }}
                         </flux:text>
                     @endif
-                    <flux:button wire:click="stopTracking" data-umami-event="track-cancel" class="mt-4 w-full" size="sm">
+                    <flux:button wire:click="stopTracking" data-umami-event="track-cancel" class="mt-2 w-full sm:mt-4" size="sm">
                         {{ __('Cancel') }}
                     </flux:button>
                 </flux:card>
 
-                <div x-cloak x-show="notificationMode === 'permission-needed'" class="mt-4">
-                    <flux:button @click="requestNotificationPermission()" variant="subtle" class="w-full text-sm"
+                <div x-cloak x-show="notificationMode === 'permission-needed'" class="mt-3 sm:mt-4">
+                    <flux:button @click="requestNotificationPermission()" data-umami-event="notification-allow-click" variant="subtle" class="w-full text-sm"
                         icon="bell" icon-position="left">
                         {{ __('Allow notifications') }}
                     </flux:button>
                 </div>
 
                 <flux:callout x-cloak x-show="notificationMode === 'push-ready' && pushLinkState === 'linked'"
-                    icon="check-circle" variant="success" class="mt-4 text-left">
+                    icon="check-circle" variant="success" class="mt-3 text-left sm:mt-4">
                     <flux:callout.heading>{{ __('Background notifications are active on this device.') }}
                     </flux:callout.heading>
                 </flux:callout>
 
                 <flux:callout x-cloak x-show="notificationMode === 'push-ready' && pushLinkState === 'failed'"
-                    icon="exclamation-triangle" variant="warning" class="mt-4 text-left">
+                    icon="exclamation-triangle" variant="warning" class="mt-3 text-left sm:mt-4">
                     <flux:callout.heading>{{ __('We could not enable push yet. Keep this page open and try again.') }}
                     </flux:callout.heading>
                     <x-slot name="actions">
-                        <flux:button size="sm" variant="filled" @click="subscribeToPush()">
+                        <flux:button size="sm" variant="filled" @click="subscribeToPush()" data-umami-event="push-retry">
                             {{ __('Try again') }}
                         </flux:button>
                     </x-slot>
                 </flux:callout>
 
                 <flux:callout x-cloak x-show="notificationMode === 'push-blocked'" icon="bell-slash" variant="warning"
-                    class="mt-4 text-left">
+                    class="mt-3 text-left sm:mt-4">
                     <flux:callout.heading>{{ __('Notifications are blocked in your browser settings for this site.') }}
                     </flux:callout.heading>
                     <flux:callout.text>
@@ -458,7 +637,7 @@ new #[Layout('layouts::guest')] class extends Component {
                 </flux:callout>
 
                 <flux:callout x-cloak x-show="notificationMode === 'echo-only-ios'" icon="device-phone-mobile"
-                    variant="secondary" class="mt-4 text-left">
+                    variant="secondary" class="mt-3 text-left sm:mt-4">
                     <flux:callout.heading>{{ __('iPhone and iPad browsers cannot deliver background push here.') }}
                     </flux:callout.heading>
                     <flux:callout.text>
@@ -467,42 +646,42 @@ new #[Layout('layouts::guest')] class extends Component {
                 </flux:callout>
 
                 <flux:callout x-cloak x-show="notificationMode === 'echo-only'" icon="signal" variant="secondary"
-                    class="mt-4 text-left">
+                    class="mt-3 text-left sm:mt-4">
                     <flux:callout.heading>{{ __('Live updates are active while this page is open.') }}
                     </flux:callout.heading>
                 </flux:callout>
             </div>
         @else
             {{-- Number entry --}}
-            <div class="w-full max-w-lg">
-                <flux:card>
+            <div wire:key="track-state-entry" class="w-full max-w-lg">
+                <flux:card class="p-4! sm:p-6!">
                     <div
-                        class="text-center mb-6 h-20 flex items-center justify-center bg-gray-100 rounded-xl dark:bg-zinc-800">
-                        <span class="text-5xl font-black text-gray-900 dark:text-gray-100 tracking-wider"
+                        class="mb-4 flex h-16 items-center justify-center rounded-xl bg-gray-100 text-center sm:mb-6 sm:h-20 dark:bg-zinc-800">
+                        <span class="text-4xl font-black tracking-wider text-gray-900 sm:text-5xl dark:text-gray-100"
                             x-text="localNumber || '....'">
                         </span>
                     </div>
 
-                    <div class="grid grid-cols-3 gap-3">
+                    <div class="grid grid-cols-3 gap-2 sm:gap-3">
                         @foreach ([7, 8, 9, 4, 5, 6, 1, 2, 3] as $num)
                             <flux:button @click="if (localNumber.length < 4) localNumber += '{{ $num }}'"
-                                class="h-16 text-2xl!">
+                                class="h-14 text-2xl! sm:h-16">
                                 {{ $num }}
                             </flux:button>
                         @endforeach
 
-                        <flux:button @click="localNumber = ''" variant="ghost" class="h-16 text-lg!">
+                        <flux:button @click="localNumber = ''" variant="ghost" class="h-14 text-lg! sm:h-16">
                             {{ __('Clear') }}
                         </flux:button>
 
-                        <flux:button @click="if (localNumber.length < 4) localNumber += '0'" class="h-16 text-2xl!">
+                        <flux:button @click="if (localNumber.length < 4) localNumber += '0'" class="h-14 text-2xl! sm:h-16">
                             0
                         </flux:button>
 
                         <div></div>
                     </div>
 
-                    <flux:button variant="primary" class="w-full mt-4" x-bind:disabled="!localNumber.length"
+                    <flux:button variant="primary" class="mt-4 h-12! w-full text-base!" x-bind:disabled="!localNumber.length"
                         @click="beginTracking()">
                         {{ __('Follow my order') }}
                     </flux:button>
@@ -510,7 +689,7 @@ new #[Layout('layouts::guest')] class extends Component {
             </div>
         @endif
 
-        <div class="w-full max-w-lg mt-4" x-cloak x-show="!installTipDismissed">
+        <div class="mt-3 w-full max-w-lg sm:mt-4" x-cloak x-show="!installTipDismissed && !$wire.orderReady">
             <flux:callout icon="device-phone-mobile" variant="secondary" class="text-left">
                 <flux:callout.heading x-show="isIos">
                     {{ __('Best on iPhone: keep this page open and add it to your Home Screen.') }}
@@ -532,8 +711,8 @@ new #[Layout('layouts::guest')] class extends Component {
             </flux:callout>
         </div>
 
-        <flux:text class="mt-4 px-2 text-center"
-            x-show="notificationMode === 'echo-only-ios' || notificationMode === 'echo-only' || notificationMode === 'push-blocked'">
+        <flux:text class="mt-3 px-2 text-center sm:mt-4" x-cloak
+            x-show="$wire.currentNumber && !$wire.orderReady && (notificationMode === 'echo-only-ios' || notificationMode === 'echo-only' || notificationMode === 'push-blocked')">
             {{ __('Keep this page open to receive notifications on this device.') }}
         </flux:text>
 

@@ -52,7 +52,8 @@
                 }
             } catch (e) {}
         </script>
-        <script defer src="https://dash.larsfixt.nl/lf.js" data-website-id="057c461e-d015-4a5b-bce9-4b64757ede84"></script>
+        <script defer src="https://dash.larsfixt.nl/lf.js" data-website-id="057c461e-d015-4a5b-bce9-4b64757ede84"
+            data-performance="true" data-before-send="umamiBeforeSend"></script>
     @endproduction
     @fluxAppearance()
 </head>
